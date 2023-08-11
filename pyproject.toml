@@ -1,0 +1,9 @@
+[tool.isort]
+profile = "black"
+
+[tool.docformatter]
+style = "sphinx"
+black = true
+wrap-summaries = 72
+wrap-descriptions = 72
+close-quotes-on-newline = true
