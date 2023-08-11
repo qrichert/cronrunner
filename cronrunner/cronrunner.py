@@ -153,16 +153,12 @@ def get_crontab() -> Crontab:
     return Crontab(nodes)
 
 
-def color_green(string: str) -> str:
-    return "\033[0;92m{}\033[0m".format(string)
-
-
 def color_error(string: str) -> str:
     return "\033[0;91m{}\033[0m".format(string)
 
 
 def color_highlight(string: str) -> str:
-    return "\033[0;94m{}\033[0m".format(string)
+    return "\033[0;92m{}\033[0m".format(string)
 
 
 def color_attenuate(string: str) -> str:
@@ -183,26 +179,25 @@ def main() -> int:
         return 0
 
     for i, job in enumerate(crontab.jobs):
-        description: str = (
-            f"{color_highlight(job.description)} " if job.description else ""
-        )
+        job_number: str = color_highlight(str(i + 1)) + "."
+        description: str = f"{job.description} " if job.description else ""
         schedule: str = color_attenuate(job.schedule)
         command: str = job.job
-        print(f"{i + 1}) {description}{schedule} {command}")
+        print(f"{job_number} {description}{schedule} {command}")
 
-    job_number: int = 0
-    while True:
-        try:
-            job_number: int = int(input("Select a job to run> "))
-            if not 0 < job_number <= len(crontab.jobs):
-                raise ValueError
-        except ValueError:
-            print(color_error("Invalid job number."))
-            continue
-        break
+    job_number: str = input(">>> Select a job to run: ")
+    if not job_number:
+        return 0
+    try:
+        job_number: int = int(job_number)
+        if not 0 < job_number <= len(crontab.jobs):
+            raise ValueError
+    except ValueError:
+        print(color_error("Invalid job number."))
+        return 1
 
     job: CronJob = crontab.jobs[job_number - 1]
-    print(color_green("$"), job.job)
+    print(color_highlight("$"), job.job)
     crontab.run(job)
 
     return 0
