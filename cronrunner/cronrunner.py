@@ -66,7 +66,9 @@ class _CrontabParser:
                 schedule, job = self._split_schedule_and_job(line)
                 description: str = ""
                 if res and isinstance(res[-1], Comment):
-                    description = res[-1].value[1:].lstrip(" ")
+                    preceding_comment: str = res[-1].value
+                    if preceding_comment.startswith("##"):
+                        description = preceding_comment[2:].lstrip(" ")
                 res.append(CronJob(schedule, job, description))
             elif self._is_variable(line):
                 res.append(Variable(line))

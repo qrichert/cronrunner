@@ -4,10 +4,9 @@ _Run cron jobs without the need to schedule them the next minute._
 
 ```console
 $ cronrunner
-1. Update brew. 30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
-2. Do something. @hourly cd $HOME && date > date.txt
-3. Print bar. * * * * * echo $FOO
-4. * * * * * : # Job without header.
+1. @reboot /usr/bin/bash ~/startup.sh
+2. Update brew. 30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
+3. Print variable. * * * * * echo $FOO
 >>> Select a job to run: 3
 $ echo $FOO
 bar
@@ -17,17 +16,17 @@ bar
 # CronRunner Demo
 # ---------------
 
-# Update brew.
+@reboot /usr/bin/bash ~/startup.sh
+
+# Double-hash comments (##) immediately preceding a job are used as
+# description. See below:
+
+## Update brew.
 30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
 
-# Do something.
-@hourly cd $HOME && date > date.txt
-
 FOO=bar
-# Print bar.
+## Print variable.
 * * * * * echo $FOO
-
-* * * * * : # Job without header.
 ```
 
 ## Installation
