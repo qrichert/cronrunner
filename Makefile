@@ -46,9 +46,9 @@ coverage: ## Unit tests coverage report
 	@open var/htmlcov/index.html || xdg-open var/htmlcov/index.html || :
 
 .PHONY: install
-install:
+install:  ## Install cronrunner
 	install -d $(PREFIX)/bin/
-	install ./cronrunner/cronrunner.py $(PREFIX)/bin/cronrunner
+	install ./cronrunner.py $(PREFIX)/bin/cronrunner
 
 %:
 	@$(call show_error_message,Unknown command '$@')

@@ -1,6 +1,6 @@
 # CronRunner
 
-_Run cron jobs without the need to schedule them the next minute._
+_Run cron jobs without having to schedule them the next minute._
 
 ```console
 $ cronrunner
