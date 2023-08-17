@@ -13,7 +13,7 @@ class CrontabReadError(Exception):
         super().__init__(*args)
 
 
-class _CrontabReader:
+class CrontabReader:
     @staticmethod
     def read() -> str:
         try:
@@ -56,7 +56,7 @@ class UnknownOrEmpty:
     value: str
 
 
-class _CrontabParser:
+class CrontabParser:
     def parse(self, crontab: str) -> list:
         res: list = []
         line: str
@@ -150,28 +150,28 @@ class Crontab:
 
 
 def get_crontab() -> Crontab:
-    crontab: str = _CrontabReader().read()
-    nodes: list = _CrontabParser().parse(crontab)
+    crontab: str = CrontabReader().read()
+    nodes: list = CrontabParser().parse(crontab)
     return Crontab(nodes)
 
 
-def color_error(string: str) -> str:
+def _color_error(string: str) -> str:
     return "\033[0;91m{}\033[0m".format(string)
 
 
-def color_highlight(string: str) -> str:
+def _color_highlight(string: str) -> str:
     return "\033[0;92m{}\033[0m".format(string)
 
 
-def color_attenuate(string: str) -> str:
+def _color_attenuate(string: str) -> str:
     return "\033[0;90m{}\033[0m".format(string)
 
 
-def main() -> int:
+def _main() -> int:
     try:
         crontab: Crontab = get_crontab()
     except CrontabReadError as e:
-        print(color_error(str(e)))
+        print(_color_error(str(e)))
         if e.detail:
             print(e.detail)
         return e.exit_code
@@ -181,9 +181,9 @@ def main() -> int:
         return 0
 
     for i, job in enumerate(crontab.jobs):
-        job_number: str = color_highlight(str(i + 1)) + "."
+        job_number: str = _color_highlight(str(i + 1)) + "."
         description: str = f"{job.description} " if job.description else ""
-        schedule: str = color_attenuate(job.schedule)
+        schedule: str = _color_attenuate(job.schedule)
         command: str = job.job
         print(f"{job_number} {description}{schedule} {command}")
 
@@ -195,11 +195,11 @@ def main() -> int:
         if not 0 < job_number <= len(crontab.jobs):
             raise ValueError
     except ValueError:
-        print(color_error("Invalid job number."))
+        print(_color_error("Invalid job number."))
         return 1
 
     job: CronJob = crontab.jobs[job_number - 1]
-    print(color_highlight("$"), job.job)
+    print(_color_highlight("$"), job.job)
     crontab.run(job)
 
     return 0
@@ -207,6 +207,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(_main())
     except KeyboardInterrupt:
         sys.exit(1)
