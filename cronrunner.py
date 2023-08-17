@@ -52,7 +52,7 @@ class Comment:
 
 
 @dataclass
-class UnknownOrEmpty:
+class Unknown:
     value: str
 
 
@@ -74,8 +74,10 @@ class CrontabParser:
                 res.append(Variable(line))
             elif self._is_comment(line):
                 res.append(Comment(line))
+            elif not line:
+                pass
             else:
-                res.append(UnknownOrEmpty(line))
+                res.append(Unknown(line))
 
         return res
 
