@@ -138,7 +138,7 @@ class Crontab:
         if job not in self.nodes:
             raise ValueError(f"Unknown job: {job}.")
         out: list = self._extract_variables_and_target_job(job)
-        subprocess.run(["bash", "-c", ";".join(out)])
+        subprocess.run(["/bin/sh", "-c", ";".join(out)])
 
     def _extract_variables_and_target_job(self, job: CronJob) -> list:
         out: list = []
