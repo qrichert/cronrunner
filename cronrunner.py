@@ -116,7 +116,7 @@ class CrontabParser:
 
     @staticmethod
     def _is_variable(line: str) -> bool:
-        return bool(re.match(r"[a-zA-Z_][a-zA-Z0-9_]*", line))
+        return "=" in line and re.match(r"[a-zA-Z_][a-zA-Z0-9_]*", line)
 
     @staticmethod
     def _is_comment(line: str) -> bool:
