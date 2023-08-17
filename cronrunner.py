@@ -123,16 +123,16 @@ class CrontabParser:
         return line.startswith("#")
 
 
-@dataclass
 class Crontab:
-    nodes: list
-
-    def __bool__(self) -> bool:
-        return len(self.jobs) > 0
+    def __init__(self, nodes: list) -> None:
+        self.nodes: list = nodes
 
     @property
     def jobs(self) -> list:
         return [node for node in self.nodes if isinstance(node, CronJob)]
+
+    def __bool__(self) -> bool:
+        return len(self.jobs) > 0
 
     def run(self, job: CronJob) -> None:
         if job not in self.nodes:
