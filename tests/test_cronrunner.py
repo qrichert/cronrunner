@@ -1,8 +1,15 @@
 import unittest
 from unittest.mock import Mock
 
-import cronrunner
-from cronrunner import Comment, CronJob, Crontab, CrontabParser, Unknown, Variable
+import cronrunner.cronrunner as cronrunner
+from cronrunner.cronrunner import (
+    Comment,
+    CronJob,
+    Crontab,
+    CrontabParser,
+    Unknown,
+    Variable,
+)
 
 
 class TestCrontabParser(unittest.TestCase):

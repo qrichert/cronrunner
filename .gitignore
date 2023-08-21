@@ -1,8 +1,17 @@
 /.idea/
 /.vscode/
 
-/.venv/
+/_wip/
+/var/*
 
+/.venv/
+/*.egg-info/
+/dist/
+/node_modules/
 __pycache__/
+
+.DS_Store
+*.py[cod]
+*.swp
 
 .coverage

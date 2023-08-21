@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
 
+# CronRunner — Run cron jobs manually.
+# Copyright (C) 2023  Quentin Richert
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 import re
 import subprocess
 import sys
@@ -169,7 +185,7 @@ def _color_attenuate(string: str) -> str:
     return "\033[0;90m{}\033[0m".format(string)
 
 
-def _main() -> int:
+def main() -> int:
     try:
         crontab: Crontab = get_crontab()
     except CrontabReadError as e:
@@ -209,6 +225,6 @@ def _main() -> int:
 
 if __name__ == "__main__":
     try:
-        sys.exit(_main())
+        sys.exit(main())
     except KeyboardInterrupt:
         sys.exit(1)

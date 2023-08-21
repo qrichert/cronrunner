@@ -31,8 +31,18 @@ FOO=bar
 
 ## Installation
 
+- Requires Python 3.7+
+
+### Directly
+
 ```console
 $ git clone https://github.com/qrichert/cronrunner.git
 $ cd cronrunner
 $ sudo make install
+```
+
+### Through `pip`
+
+```console
+$ python3 -m pip install git+https://github.com/qrichert/cronrunner.git
 ```
