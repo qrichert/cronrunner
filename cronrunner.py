@@ -186,7 +186,7 @@ def _main() -> int:
         job_number: str = _color_highlight(str(i + 1)) + "."
         description: str = f"{job.description} " if job.description else ""
         schedule: str = _color_attenuate(job.schedule)
-        command: str = job.job
+        command: str = _color_attenuate(job.job) if description else job.job
         print(f"{job_number} {description}{schedule} {command}")
 
     job_number: str = input(">>> Select a job to run: ")
