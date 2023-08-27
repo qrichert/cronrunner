@@ -1,0 +1,9 @@
+/.idea/
+/.vscode/
+
+/_wip/
+/var/*
+
+/.venv/
+/node_modules/
+__pycache__/
