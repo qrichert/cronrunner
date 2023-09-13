@@ -20,6 +20,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 
 class CrontabReadError(Exception):
@@ -184,7 +185,7 @@ class Crontab:
             raise ValueError(f"Unknown job: {job}.")
         self._shell = self.DEFAULT_SHELL
         out: list = self._extract_variables_and_target_job(job)
-        subprocess.run([self._shell, "-c", ";".join(out)])
+        subprocess.run([self._shell, "-c", ";".join(out)], cwd=Path().home())
 
     def _extract_variables_and_target_job(self, job: CronJob) -> list:
         out: list = []

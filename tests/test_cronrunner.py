@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
 import cronrunner.cronrunner as cronrunner
@@ -10,6 +11,8 @@ from cronrunner.cronrunner import (
     Unknown,
     Variable,
 )
+
+CWD: dict = {"cwd": Path().home()}
 
 
 class TestCrontabParser(unittest.TestCase):
@@ -148,25 +151,33 @@ class TestCrontab(unittest.TestCase):
             crontab.jobs, [node for node in self.nodes if isinstance(node, CronJob)]
         )
 
+    def test_working_directory_is_home_directory(self) -> None:
+        crontab = Crontab(self.nodes)
+        crontab.run(crontab.jobs[0])
+        self.assertEqual(
+            cronrunner.subprocess.run.call_args.kwargs["cwd"],
+            Path().home(),
+        )
+
     def test_run_cron_without_variable(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[0])
         cronrunner.subprocess.run.assert_called_with(
-            [Crontab.DEFAULT_SHELL, "-c", "/usr/bin/bash ~/startup.sh"]
+            [Crontab.DEFAULT_SHELL, "-c", "/usr/bin/bash ~/startup.sh"], **CWD
         )
 
     def test_run_cron_with_variable(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[2])
         cronrunner.subprocess.run.assert_called_with(
-            [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;echo $FOO"]
+            [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;echo $FOO"], **CWD
         )
 
     def test_run_cron_after_variable_but_not_stuck_to_it(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[3])
         cronrunner.subprocess.run.assert_called_with(
-            [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;:"]
+            [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;:"], **CWD
         )
 
     def test_run_cron_with_default_shell(self) -> None:
@@ -181,7 +192,8 @@ class TestCrontab(unittest.TestCase):
         crontab.run(crontab.jobs[4])
         self.assertEqual(cronrunner.subprocess.run.call_args.args[0][0], "/bin/bash")
         cronrunner.subprocess.run.assert_called_with(
-            ["/bin/bash", "-c", "FOO=bar;SHELL=/bin/bash;echo 'I am echoed by bash!'"]
+            ["/bin/bash", "-c", "FOO=bar;SHELL=/bin/bash;echo 'I am echoed by bash!'"],
+            **CWD,
         )
 
     def test_shell_is_reset_between_two_executions(self) -> None:
