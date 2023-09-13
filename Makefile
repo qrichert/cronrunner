@@ -48,11 +48,11 @@ coverage: ## Unit tests coverage report
 .PHONY: b
 b: build
 .PHONY: build
-build: ## Build cronrunner
+build: ## Build CronRunner
 	python -m build
 
 .PHONY: install
-install: ## Install cronrunner
+install: ## Install CronRunner
 	install -d $(PREFIX)/bin/
 	install ./cronrunner/cronrunner.py $(PREFIX)/bin/cronrunner
 

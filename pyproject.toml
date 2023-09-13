@@ -1,5 +1,5 @@
 [project]
-name = "cronrunner"
+name = "CronRunner"
 version = "1.0.0"
 authors = [
     { name="Quentin Richert", email="noreply@richert.co" },

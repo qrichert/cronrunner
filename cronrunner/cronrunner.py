@@ -74,28 +74,27 @@ class Unknown:
 
 class CrontabParser:
     def parse(self, crontab: str) -> list:
-        res: list = []
+        tokens: list = []
         line: str
         for line in crontab.splitlines():
             line = line.strip()
             if self._is_job(line):
                 schedule, job = self._split_schedule_and_job(line)
                 description: str = ""
-                if res and isinstance(res[-1], Comment):
-                    preceding_comment: str = res[-1].value
-                    if preceding_comment.startswith("##"):
-                        description = preceding_comment[2:].lstrip(" ")
-                res.append(CronJob(schedule, job, description))
+                if self._is_previous_token_a_description_comment(tokens):
+                    description_comment: str = tokens[-1].value
+                    description = description_comment[2:].lstrip()
+                tokens.append(CronJob(schedule, job, description))
             elif self._is_variable(line):
-                res.append(Variable(line))
+                tokens.append(Variable(line))
             elif self._is_comment(line):
-                res.append(Comment(line))
+                tokens.append(Comment(line))
             elif not line:
                 pass
             else:
-                res.append(Unknown(line))
+                tokens.append(Unknown(line))
 
-        return res
+        return tokens
 
     @staticmethod
     def _is_job(line: str) -> bool:
@@ -129,6 +128,22 @@ class CrontabParser:
         schedule: str = " ".join(schedule).strip()
         job: str = " ".join(job).strip()
         return schedule, job
+
+    @staticmethod
+    def _is_previous_token_a_description_comment(tokens: list) -> bool:
+        """Return whether the previous token is a job description.
+
+        Description comments are comments that start with "##" and
+        immediately precede a job. They are used in the job list menu to
+        give a human-readable description to sometimes obscure commands.
+
+        This is CronRunner specific, and has nothing to do with Cron
+        itself.
+        """
+        if not tokens:
+            return False
+        last_token: str = tokens[-1]
+        return isinstance(last_token, Comment) and last_token.value.startswith("##")
 
     @staticmethod
     def _is_variable(line: str) -> bool:
