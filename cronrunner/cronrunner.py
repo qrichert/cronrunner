@@ -59,7 +59,12 @@ class CronJob:
 
 @dataclass
 class Variable:
+    identifier: str
     value: str
+
+    @property
+    def declaration(self) -> str:
+        return f"{self.identifier}={self.value}"
 
 
 @dataclass
@@ -86,7 +91,8 @@ class CrontabParser:
                     description = description_comment[2:].lstrip()
                 tokens.append(CronJob(schedule, job, description))
             elif self._is_variable(line):
-                tokens.append(Variable(line))
+                identifier, value = self._split_identifier_and_value(line)
+                tokens.append(Variable(identifier, value))
             elif self._is_comment(line):
                 tokens.append(Comment(line))
             elif not line:
@@ -117,12 +123,12 @@ class CrontabParser:
         job: list = []
         i: int = 0
         for element in line.split(" "):
-            # Schedule
+            # Schedule.
             if i < schedule_length:
                 schedule.append(element)
                 if element:
                     i += 1
-            # Job
+            # Job.
             else:
                 job.append(element)
         schedule: str = " ".join(schedule).strip()
@@ -150,13 +156,21 @@ class CrontabParser:
         return "=" in line and re.match(r"[a-zA-Z_][a-zA-Z0-9_]*", line)
 
     @staticmethod
+    def _split_identifier_and_value(line: str) -> tuple:
+        identifier, value = line.split("=")
+        return identifier.strip(), value.strip()
+
+    @staticmethod
     def _is_comment(line: str) -> bool:
         return line.startswith("#")
 
 
 class Crontab:
+    DEFAULT_SHELL: str = "/bin/sh"
+
     def __init__(self, nodes: list) -> None:
         self.nodes: list = nodes
+        self._shell: str = ""
 
     @property
     def jobs(self) -> list:
@@ -168,18 +182,24 @@ class Crontab:
     def run(self, job: CronJob) -> None:
         if job not in self.nodes:
             raise ValueError(f"Unknown job: {job}.")
+        self._shell = self.DEFAULT_SHELL
         out: list = self._extract_variables_and_target_job(job)
-        subprocess.run(["/bin/sh", "-c", ";".join(out)])
+        subprocess.run([self._shell, "-c", ";".join(out)])
 
     def _extract_variables_and_target_job(self, job: CronJob) -> list:
         out: list = []
         for node in self.nodes:
             if isinstance(node, Variable):
-                out.append(node.value)
+                self._detect_shell_change(node)
+                out.append(node.declaration)
             if node == job:
                 out.append(node.job)
                 break  # Variables coming after the job are not used.
         return out
+
+    def _detect_shell_change(self, variable: Variable) -> None:
+        if variable.identifier == "SHELL":
+            self._shell = variable.value
 
 
 def get_crontab() -> Crontab:

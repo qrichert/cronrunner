@@ -54,7 +54,7 @@ class TestCrontabParser(unittest.TestCase):
                     job="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
                     description="Update brew.",
                 ),
-                Variable(value="FOO=bar"),
+                Variable(identifier="FOO", value="bar"),
                 Comment(value="## Print variable."),
                 CronJob(
                     schedule="* * * * *", job="echo $FOO", description="Print variable."
@@ -75,6 +75,16 @@ class TestCrontabParser(unittest.TestCase):
             ],
         )
 
+    def test_whitespace_is_cleared_around_variables(self) -> None:
+        parser = CrontabParser()
+        nodes: list = parser.parse("   FOO     =   bar   ")
+        self.assertListEqual(
+            nodes,
+            [
+                Variable(identifier="FOO", value="bar"),
+            ],
+        )
+
 
 class TestCrontab(unittest.TestCase):
     @classmethod
@@ -83,7 +93,9 @@ class TestCrontab(unittest.TestCase):
             Comment(value="# CronRunner Demo"),
             Comment(value="# ---------------"),
             CronJob(
-                schedule="@reboot", job="/usr/bin/bash ~/startup.sh", description=""
+                schedule="@reboot",
+                job="/usr/bin/bash ~/startup.sh",
+                description="",
             ),
             Comment(
                 value="# Double-hash comments (##) immediately preceding a job are used as"
@@ -95,17 +107,32 @@ class TestCrontab(unittest.TestCase):
                 job="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
                 description="Update brew.",
             ),
-            Variable(value="FOO=bar"),
+            Variable(identifier="FOO", value="bar"),
             Comment(value="## Print variable."),
             CronJob(
-                schedule="* * * * *", job="echo $FOO", description="Print variable."
+                schedule="* * * * *",
+                job="echo $FOO",
+                description="Print variable.",
             ),
             Comment(value="# Do nothing (this is a regular comment)."),
-            CronJob(schedule="@reboot", job=":", description=""),
+            CronJob(
+                schedule="@reboot",
+                job=":",
+                description="",
+            ),
+            Variable(identifier="SHELL", value="/bin/bash"),
+            CronJob(
+                schedule="@hourly",
+                job="echo 'I am echoed by bash!'",
+                description="",
+            ),
         ]
 
     def setUp(self) -> None:
         cronrunner.subprocess.run = Mock()
+
+    def test_default_shell(self) -> None:
+        self.assertEqual(Crontab.DEFAULT_SHELL, "/bin/sh")
 
     def test_bool_true(self) -> None:
         crontab = Crontab(self.nodes)
@@ -125,20 +152,50 @@ class TestCrontab(unittest.TestCase):
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[0])
         cronrunner.subprocess.run.assert_called_with(
-            ["/bin/sh", "-c", "/usr/bin/bash ~/startup.sh"]
+            [Crontab.DEFAULT_SHELL, "-c", "/usr/bin/bash ~/startup.sh"]
         )
 
     def test_run_cron_with_variable(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[2])
         cronrunner.subprocess.run.assert_called_with(
-            ["/bin/sh", "-c", "FOO=bar;echo $FOO"]
+            [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;echo $FOO"]
         )
 
     def test_run_cron_after_variable_but_not_stuck_to_it(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[3])
-        cronrunner.subprocess.run.assert_called_with(["/bin/sh", "-c", "FOO=bar;:"])
+        cronrunner.subprocess.run.assert_called_with(
+            [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;:"]
+        )
+
+    def test_run_cron_with_default_shell(self) -> None:
+        crontab = Crontab(self.nodes)
+        crontab.run(crontab.jobs[0])
+        self.assertEqual(
+            cronrunner.subprocess.run.call_args.args[0][0], Crontab.DEFAULT_SHELL
+        )
+
+    def test_run_cron_with_different_shell(self) -> None:
+        crontab = Crontab(self.nodes)
+        crontab.run(crontab.jobs[4])
+        self.assertEqual(cronrunner.subprocess.run.call_args.args[0][0], "/bin/bash")
+        cronrunner.subprocess.run.assert_called_with(
+            ["/bin/bash", "-c", "FOO=bar;SHELL=/bin/bash;echo 'I am echoed by bash!'"]
+        )
+
+    def test_shell_is_reset_between_two_executions(self) -> None:
+        crontab = Crontab(self.nodes)
+
+        crontab.run(crontab.jobs[4])
+        self.assertEqual(cronrunner.subprocess.run.call_count, 1)
+        self.assertEqual(cronrunner.subprocess.run.call_args.args[0][0], "/bin/bash")
+
+        crontab.run(crontab.jobs[0])
+        self.assertEqual(cronrunner.subprocess.run.call_count, 2)
+        self.assertEqual(
+            cronrunner.subprocess.run.call_args.args[0][0], Crontab.DEFAULT_SHELL
+        )
 
     def test_run_job_not_in_crontab(self) -> None:
         crontab = Crontab(self.nodes)
