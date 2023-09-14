@@ -67,7 +67,21 @@ class TestCrontabParser(unittest.TestCase):
             ],
         )
 
-    def test_crontab_with_unknown_job_shortcut(self) -> None:
+    def test_description_detection_does_not_fail_if_nothing_precedes_job(self) -> None:
+        parser = CrontabParser()
+        nodes: list = parser.parse("* * * * * printf 'hello, world'")
+        self.assertListEqual(
+            nodes,
+            [
+                CronJob(
+                    schedule="* * * * *",
+                    job="printf 'hello, world'",
+                    description="",
+                )
+            ],
+        )
+
+    def test_unknown_job_shortcut(self) -> None:
         parser = CrontabParser()
         nodes: list = parser.parse("# The following line is unknown:\nunknown :")
         self.assertListEqual(
