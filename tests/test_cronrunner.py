@@ -35,6 +35,9 @@ class TestCrontabParser(unittest.TestCase):
             ## Print variable.
             * * * * * echo $FOO
 
+            # Variable with value containing '='.
+            DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+
             # Do nothing (this is a regular comment).
             @reboot :
             """
@@ -61,6 +64,11 @@ class TestCrontabParser(unittest.TestCase):
                 Comment(value="## Print variable."),
                 CronJob(
                     schedule="* * * * *", job="echo $FOO", description="Print variable."
+                ),
+                Comment(value="# Variable with value containing '='."),
+                Variable(
+                    identifier="DBUS_SESSION_BUS_ADDRESS",
+                    value="unix:path=/run/user/1000/bus",
                 ),
                 Comment(value="# Do nothing (this is a regular comment)."),
                 CronJob(schedule="@reboot", job=":", description=""),

@@ -158,7 +158,7 @@ class CrontabParser:
 
     @staticmethod
     def _split_identifier_and_value(line: str) -> tuple:
-        identifier, value = line.split("=")
+        identifier, value = line.split("=", maxsplit=1)
         return identifier.strip(), value.strip()
 
     @staticmethod
