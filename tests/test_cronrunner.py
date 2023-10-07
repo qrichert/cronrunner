@@ -1,3 +1,4 @@
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
@@ -8,11 +9,53 @@ from cronrunner.cronrunner import (
     CronJob,
     Crontab,
     CrontabParser,
+    CrontabReader,
+    CrontabReadError,
     Unknown,
     Variable,
+    get_crontab,
 )
 
 CWD: dict = {"cwd": Path().home()}
+
+
+class TestCrontabReader(unittest.TestCase):
+    def setUp(self) -> None:
+        cronrunner.subprocess.run = Mock()
+
+    def test_regular_read(self) -> None:
+        run_result = Mock()
+        run_result.stdout = "<crontab>"
+        cronrunner.subprocess.run = Mock(return_value=run_result)
+        reader = CrontabReader()
+        crontab: str = reader.read()
+        self.assertEqual(crontab, "<crontab>")
+
+    def test_is_read_with_correct_arguments(self) -> None:
+        reader = CrontabReader()
+        reader.read()
+        cronrunner.subprocess.run.assert_called_with(
+            ["crontab", "-l"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+    def test_error_if_exit_code_not_0_is_handled(self) -> None:
+        cronrunner.subprocess.run = Mock(
+            side_effect=subprocess.CalledProcessError(1337, cmd="", stderr="<stderr>")
+        )
+        reader = CrontabReader()
+        with self.assertRaises(CrontabReadError) as ctx:
+            reader.read()
+        self.assertEqual(ctx.exception.exit_code, 1337)
+        self.assertEqual(ctx.exception.detail, "<stderr>")
+
+    def test_error_if_executable_not_found_is_handled(self) -> None:
+        cronrunner.subprocess.run = Mock(side_effect=FileNotFoundError)
+        reader = CrontabReader()
+        with self.assertRaises(CrontabReadError):
+            reader.read()
 
 
 class TestCrontabParser(unittest.TestCase):
@@ -34,9 +77,6 @@ class TestCrontabParser(unittest.TestCase):
             FOO=bar
             ## Print variable.
             * * * * * echo $FOO
-
-            # Variable with value containing '='.
-            DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 
             # Do nothing (this is a regular comment).
             @reboot :
@@ -64,11 +104,6 @@ class TestCrontabParser(unittest.TestCase):
                 Comment(value="## Print variable."),
                 CronJob(
                     schedule="* * * * *", job="echo $FOO", description="Print variable."
-                ),
-                Comment(value="# Variable with value containing '='."),
-                Variable(
-                    identifier="DBUS_SESSION_BUS_ADDRESS",
-                    value="unix:path=/run/user/1000/bus",
                 ),
                 Comment(value="# Do nothing (this is a regular comment)."),
                 CronJob(schedule="@reboot", job=":", description=""),
@@ -107,6 +142,35 @@ class TestCrontabParser(unittest.TestCase):
             nodes,
             [
                 Variable(identifier="FOO", value="bar"),
+            ],
+        )
+
+    def test_variable_with_value_containing_equal_sign(self) -> None:
+        parser = CrontabParser()
+        nodes: list = parser.parse(
+            "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+        )
+        self.assertListEqual(
+            nodes,
+            [
+                Variable(
+                    identifier="DBUS_SESSION_BUS_ADDRESS",
+                    value="unix:path=/run/user/1000/bus",
+                ),
+            ],
+        )
+
+    def test_extra_whitespace_in_schedule_is_ignored(self) -> None:
+        parser = CrontabParser()
+        nodes: list = parser.parse("*   *    *   *   * printf 'hello, world'")
+        self.assertListEqual(
+            nodes,
+            [
+                CronJob(
+                    schedule="*   *    *   *   *",
+                    job="printf 'hello, world'",
+                    description="",
+                )
             ],
         )
 
@@ -235,6 +299,38 @@ class TestCrontab(unittest.TestCase):
         crontab = Crontab(self.nodes)
         with self.assertRaises(ValueError):
             crontab.run(CronJob(schedule="", job="", description=""))
+
+
+class TestGetCrontab(unittest.TestCase):
+    def setUp(self) -> None:
+        cronrunner.subprocess.run = Mock()
+
+    def test_get_crontab(self) -> None:
+        run_result = Mock()
+        run_result.stdout = """
+            @reboot /usr/bin/bash ~/startup.sh
+
+            ## Update brew.
+            30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
+            """
+        cronrunner.subprocess.run = Mock(return_value=run_result)
+        crontab: Crontab = get_crontab()
+        self.assertEqual(
+            crontab.nodes,
+            [
+                CronJob(
+                    schedule="@reboot",
+                    job="/usr/bin/bash ~/startup.sh",
+                    description="",
+                ),
+                Comment(value="## Update brew."),
+                CronJob(
+                    schedule="30 20 * * *",
+                    job="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
+                    description="Update brew.",
+                ),
+            ],
+        )
 
 
 if __name__ == "__main__":

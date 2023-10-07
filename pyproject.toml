@@ -25,6 +25,16 @@ cronrunner = "cronrunner.cronrunner:main"
 [tool.setuptools]
 packages = ["cronrunner"]
 
+[tool.coverage.report]
+exclude_lines = [
+    # Note: 'pass' should be included, use '...' for stubs.
+    "pragma: no cover",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "\\.\\.\\.",
+]
+
 [tool.isort]
 profile = "black"
 
