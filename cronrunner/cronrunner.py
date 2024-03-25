@@ -108,7 +108,7 @@ class CrontabParser:
         return bool(re.match(r"(\d+|\*|@)", line))
 
     @staticmethod
-    def _split_schedule_and_job(line: str) -> tuple:
+    def _split_schedule_and_job(line: str) -> tuple[str, str]:
         """Split schedule and job parts of a job line.
 
         This is a naive splitter that assumes a schedule consists of
@@ -120,20 +120,20 @@ class CrontabParser:
         itself.
         """
         schedule_length: int = 1 if line.startswith("@") else 5
-        schedule: list = []
-        job: list = []
+        schedule_elements: list[str] = []
+        job_elements: list[str] = []
         i: int = 0
         for element in line.split(" "):
             # Schedule.
             if i < schedule_length:
-                schedule.append(element)
+                schedule_elements.append(element)
                 if element:
                     i += 1
             # Job.
             else:
-                job.append(element)
-        schedule: str = " ".join(schedule).strip()
-        job: str = " ".join(job).strip()
+                job_elements.append(element)
+        schedule: str = " ".join(schedule_elements).strip()
+        job: str = " ".join(job_elements).strip()
         return schedule, job
 
     @staticmethod
@@ -154,7 +154,7 @@ class CrontabParser:
 
     @staticmethod
     def _is_variable(line: str) -> bool:
-        return "=" in line and re.match(r"[a-zA-Z_][a-zA-Z0-9_]*", line)
+        return "=" in line and bool(re.match(r"[a-zA-Z_][a-zA-Z0-9_]*", line))
 
     @staticmethod
     def _split_identifier_and_value(line: str) -> tuple:
@@ -193,7 +193,7 @@ class Crontab:
             if isinstance(node, Variable):
                 self._detect_shell_change(node)
                 out.append(node.declaration)
-            if node == job:
+            elif node == job:
                 out.append(node.job)
                 break  # Variables coming after the job are not used.
         return out
@@ -234,6 +234,7 @@ def main() -> int:
         print("No jobs to run.")
         return 0
 
+    # Print jobs available, numbered.
     for i, job in enumerate(crontab.jobs):
         job_number: str = _color_highlight(str(i + 1)) + "."
         description: str = f"{job.description} " if job.description else ""
@@ -241,18 +242,18 @@ def main() -> int:
         command: str = _color_attenuate(job.job) if description else job.job
         print(f"{job_number} {description}{schedule} {command}")
 
-    job_number: str = input(">>> Select a job to run: ")
-    if not job_number:
+    job_selected: str = input(">>> Select a job to run: ")
+    if not job_selected:
         return 0
     try:
-        job_number: int = int(job_number)
-        if not 0 < job_number <= len(crontab.jobs):
+        job_index: int = int(job_selected) - 1
+        if not 0 <= job_index < len(crontab.jobs):
             raise ValueError
     except ValueError:
         print(_color_error("Invalid job number."))
         return 1
 
-    job: CronJob = crontab.jobs[job_number - 1]
+    job: CronJob = crontab.jobs[job_index]
     print(_color_highlight("$"), job.job)
     crontab.run(job)
 

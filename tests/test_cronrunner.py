@@ -1,6 +1,7 @@
 import subprocess
 import unittest
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock
 
 import cronrunner.cronrunner as cronrunner
@@ -34,7 +35,7 @@ class TestCrontabReader(unittest.TestCase):
     def test_is_read_with_correct_arguments(self) -> None:
         reader = CrontabReader()
         reader.read()
-        cronrunner.subprocess.run.assert_called_with(
+        cast(Mock, cronrunner.subprocess).run.assert_called_with(
             ["crontab", "-l"],
             capture_output=True,
             text=True,
@@ -241,28 +242,28 @@ class TestCrontab(unittest.TestCase):
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[0])
         self.assertEqual(
-            cronrunner.subprocess.run.call_args.kwargs["cwd"],
+            cast(Mock, cronrunner.subprocess).run.call_args.kwargs["cwd"],
             Path().home(),
         )
 
     def test_run_cron_without_variable(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[0])
-        cronrunner.subprocess.run.assert_called_with(
+        cast(Mock, cronrunner.subprocess).run.assert_called_with(
             [Crontab.DEFAULT_SHELL, "-c", "/usr/bin/bash ~/startup.sh"], **CWD
         )
 
     def test_run_cron_with_variable(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[2])
-        cronrunner.subprocess.run.assert_called_with(
+        cast(Mock, cronrunner.subprocess).run.assert_called_with(
             [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;echo $FOO"], **CWD
         )
 
     def test_run_cron_after_variable_but_not_stuck_to_it(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[3])
-        cronrunner.subprocess.run.assert_called_with(
+        cast(Mock, cronrunner.subprocess).run.assert_called_with(
             [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;:"], **CWD
         )
 
@@ -270,14 +271,17 @@ class TestCrontab(unittest.TestCase):
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[0])
         self.assertEqual(
-            cronrunner.subprocess.run.call_args.args[0][0], Crontab.DEFAULT_SHELL
+            cast(Mock, cronrunner.subprocess).run.call_args.args[0][0],
+            Crontab.DEFAULT_SHELL,
         )
 
     def test_run_cron_with_different_shell(self) -> None:
         crontab = Crontab(self.nodes)
         crontab.run(crontab.jobs[4])
-        self.assertEqual(cronrunner.subprocess.run.call_args.args[0][0], "/bin/bash")
-        cronrunner.subprocess.run.assert_called_with(
+        self.assertEqual(
+            cast(Mock, cronrunner.subprocess).run.call_args.args[0][0], "/bin/bash"
+        )
+        cast(Mock, cronrunner.subprocess).run.assert_called_with(
             ["/bin/bash", "-c", "FOO=bar;SHELL=/bin/bash;echo 'I am echoed by bash!'"],
             **CWD,
         )
@@ -286,13 +290,16 @@ class TestCrontab(unittest.TestCase):
         crontab = Crontab(self.nodes)
 
         crontab.run(crontab.jobs[4])
-        self.assertEqual(cronrunner.subprocess.run.call_count, 1)
-        self.assertEqual(cronrunner.subprocess.run.call_args.args[0][0], "/bin/bash")
+        self.assertEqual(cast(Mock, cronrunner.subprocess).run.call_count, 1)
+        self.assertEqual(
+            cast(Mock, cronrunner.subprocess).run.call_args.args[0][0], "/bin/bash"
+        )
 
         crontab.run(crontab.jobs[0])
-        self.assertEqual(cronrunner.subprocess.run.call_count, 2)
+        self.assertEqual(cast(Mock, cronrunner.subprocess).run.call_count, 2)
         self.assertEqual(
-            cronrunner.subprocess.run.call_args.args[0][0], Crontab.DEFAULT_SHELL
+            cast(Mock, cronrunner.subprocess).run.call_args.args[0][0],
+            Crontab.DEFAULT_SHELL,
         )
 
     def test_run_job_not_in_crontab(self) -> None:

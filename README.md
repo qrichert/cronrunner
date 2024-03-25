@@ -1,6 +1,6 @@
 # CronRunner
 
-_Run cron jobs without having to schedule them the next minute._
+_Run cron jobs manually._
 
 ```console
 $ cronrunner
@@ -31,7 +31,7 @@ FOO=bar
 
 ## Installation
 
-- Requires Python 3.7+
+- Requires Python 3.9+
 
 ### Directly
 
