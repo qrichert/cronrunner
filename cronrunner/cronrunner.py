@@ -236,7 +236,7 @@ def main() -> int:
 
     # Print jobs available, numbered.
     for i, job in enumerate(crontab.jobs):
-        job_number: str = _color_highlight(str(i + 1)) + "."
+        job_number: str = _color_highlight(str(i + 1) + ".")
         description: str = f"{job.description} " if job.description else ""
         schedule: str = _color_attenuate(job.schedule)
         command: str = _color_attenuate(job.job) if description else job.job
