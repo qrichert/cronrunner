@@ -45,6 +45,16 @@ coverage: ## Unit tests coverage report
 	@python -m coverage html -d var/htmlcov
 	@open var/htmlcov/index.html || xdg-open var/htmlcov/index.html || :
 
+.PHONY: coverage-pct
+coverage-pct: ## Ensure code coverage == 100%
+	@python -m coverage run -m unittest > /dev/null 2>&1 || :
+	@python -m coverage json -q -o /dev/stdout | python -c \
+		'import decimal, json, sys; \
+		coverage = json.loads(input(), parse_float=decimal.Decimal); \
+		percent_covered = coverage["totals"]["percent_covered"]; \
+		print(percent_covered); \
+		sys.exit(0 if percent_covered == 100 else 1);'
+
 .PHONY: b
 b: build
 .PHONY: build
