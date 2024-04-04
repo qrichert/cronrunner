@@ -65,7 +65,7 @@ class Variable:
     value: str
 
     @property
-    def declaration(self) -> str:
+    def statement(self) -> str:
         return f"{self.identifier}={self.value}"
 
 
@@ -144,7 +144,7 @@ class CrontabParser:
     def _is_previous_token_a_description_comment(tokens: list[Token]) -> bool:
         """Whether the previous token is a job description.
 
-        Description comments are comments that start with "##" and
+        Description comments are comments that start with `##` and
         immediately precede a job. They are used in the job list menu to
         give a human-readable description to sometimes obscure commands.
 
@@ -195,14 +195,14 @@ class Crontab:
         out: list[str] = []
         for token in self.tokens:
             if isinstance(token, Variable):
-                self._detect_shell_change(token)
-                out.append(token.declaration)
+                self._handle_shell_change(token)
+                out.append(token.statement)
             elif token is job:
                 out.append(cast(CronJob, token).command)
                 break  # Variables coming after the job are not used.
         return out
 
-    def _detect_shell_change(self, variable: Variable) -> None:
+    def _handle_shell_change(self, variable: Variable) -> None:
         if variable.identifier == "SHELL":
             self._shell = variable.value
 
