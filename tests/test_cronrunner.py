@@ -309,6 +309,30 @@ class TestCrontab(unittest.TestCase):
         with self.assertRaises(ValueError):
             crontab.run(CronJob(schedule="", command="", description=""))
 
+    def test_two_equal_jobs_are_treated_as_different_jobs(self) -> None:
+        crontab = Crontab(
+            [
+                CronJob(
+                    schedule="@daily",
+                    command="df -h > ~/track_disk_usage.txt",
+                    description="Track disk usage.",
+                ),
+                Variable(identifier="FOO", value="bar"),
+                CronJob(
+                    schedule="@daily",
+                    command="df -h > ~/track_disk_usage.txt",
+                    description="Track disk usage.",
+                ),
+            ]
+        )
+        crontab.run(crontab.jobs[1])
+        # If 'FOO=bar' is not included, it means the first of the twin
+        # jobs was used instead of the second that we selected.
+        self.subprocess_run_mock.assert_called_with(
+            ["/bin/sh", "-c", "FOO=bar;df -h > ~/track_disk_usage.txt"],
+            **CWD,
+        )
+
 
 class TestGetCrontab(unittest.TestCase):
     def setUp(self) -> None:

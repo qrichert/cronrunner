@@ -197,7 +197,7 @@ class Crontab:
             if isinstance(token, Variable):
                 self._detect_shell_change(token)
                 out.append(token.declaration)
-            elif token == job:
+            elif token is job:
                 out.append(cast(CronJob, token).command)
                 break  # Variables coming after the job are not used.
         return out
