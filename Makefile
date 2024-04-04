@@ -58,11 +58,11 @@ coverage-pct: ## Ensure code coverage == 100%
 .PHONY: b
 b: build
 .PHONY: build
-build: ## Build CronRunner
+build: ## Build cronrunner
 	python -m build
 
 .PHONY: install
-install: ## Install CronRunner
+install: ## Install cronrunner
 	install -d $(PREFIX)/bin/
 	install ./cronrunner/cronrunner.py $(PREFIX)/bin/cronrunner
 

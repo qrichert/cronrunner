@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# CronRunner — Run cron jobs manually.
+# cronrunner — Run cron jobs manually.
 # Copyright (C) 2023  Quentin Richert
 #
 # This program is free software: you can redistribute it and/or modify
@@ -148,7 +148,7 @@ class CrontabParser:
         immediately precede a job. They are used in the job list menu to
         give a human-readable description to sometimes obscure commands.
 
-        This is CronRunner specific, and has nothing to do with Cron
+        This is cronrunner specific, and has nothing to do with Cron
         itself.
         """
         if not tokens:

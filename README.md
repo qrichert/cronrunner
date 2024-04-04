@@ -1,4 +1,4 @@
-# CronRunner
+# cronrunner
 
 _Run cron jobs manually._
 
