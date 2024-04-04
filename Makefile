@@ -1,6 +1,6 @@
-ERROR := \033[0;91m
-INFO := \033[0;94m
-NC := \033[0m
+ERROR := \x1b[0;91m
+INFO := \x1b[0;94m
+NC := \x1b[0m
 
 define show_help_message
 	echo "Usage: make TARGET"

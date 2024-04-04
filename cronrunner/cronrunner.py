@@ -21,6 +21,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 
 class CrontabReadError(Exception):
@@ -54,7 +55,7 @@ class CrontabReader:
 @dataclass
 class CronJob:
     schedule: str
-    job: str
+    command: str
     description: str
 
 
@@ -78,26 +79,29 @@ class Unknown:
     value: str
 
 
+type Token = CronJob | Variable | Comment | Unknown
+
+
 class CrontabParser:
-    def parse(self, crontab: str) -> list:
-        tokens: list = []
+    def parse(self, crontab: str) -> list[Token]:
+        tokens: list[Token] = []
         line: str
         for line in crontab.splitlines():
             line = line.strip()
+            if not line:
+                continue
             if self._is_job(line):
-                schedule, job = self._split_schedule_and_job(line)
+                schedule, command = self._split_schedule_and_command(line)
                 description: str = ""
                 if self._is_previous_token_a_description_comment(tokens):
-                    description_comment: str = tokens[-1].value
+                    description_comment: str = cast(Comment, tokens[-1]).value
                     description = description_comment[2:].lstrip()
-                tokens.append(CronJob(schedule, job, description))
+                tokens.append(CronJob(schedule, command, description))
             elif self._is_variable(line):
                 identifier, value = self._split_identifier_and_value(line)
                 tokens.append(Variable(identifier, value))
             elif self._is_comment(line):
                 tokens.append(Comment(line))
-            elif not line:
-                pass
             else:
                 tokens.append(Unknown(line))
 
@@ -105,23 +109,23 @@ class CrontabParser:
 
     @staticmethod
     def _is_job(line: str) -> bool:
-        return bool(re.match(r"(\d+|\*|@)", line))
+        return bool(re.match(r"([0-9]|\*|@)", line))
 
     @staticmethod
-    def _split_schedule_and_job(line: str) -> tuple[str, str]:
-        """Split schedule and job parts of a job line.
+    def _split_schedule_and_command(line: str) -> tuple[str, str]:
+        """Split schedule and command parts of a job line.
 
         This is a naive splitter that assumes a schedule consists of
-        either one element if it is a shortcut (e.g., @daily), or five
-        elements if not (e.g., * * * * *, 0 12 * * *, etc.).
+        either one element if it is a shortcut (e.g., `@daily`), or five
+        elements if not (e.g., `* * * * *`, `0 12 * * *`, etc.).
 
         Once the appropriate number of elements is consumed (i.e., the
-        schedule is consumed), it considers the rest to be the job
+        schedule is consumed), it considers the rest to be the command
         itself.
         """
         schedule_length: int = 1 if line.startswith("@") else 5
         schedule_elements: list[str] = []
-        job_elements: list[str] = []
+        command_elements: list[str] = []
         i: int = 0
         for element in line.split(" "):
             # Schedule.
@@ -129,16 +133,16 @@ class CrontabParser:
                 schedule_elements.append(element)
                 if element:
                     i += 1
-            # Job.
+            # Command.
             else:
-                job_elements.append(element)
+                command_elements.append(element)
         schedule: str = " ".join(schedule_elements).strip()
-        job: str = " ".join(job_elements).strip()
-        return schedule, job
+        command: str = " ".join(command_elements).strip()
+        return schedule, command
 
     @staticmethod
-    def _is_previous_token_a_description_comment(tokens: list) -> bool:
-        """Return whether the previous token is a job description.
+    def _is_previous_token_a_description_comment(tokens: list[Token]) -> bool:
+        """Whether the previous token is a job description.
 
         Description comments are comments that start with "##" and
         immediately precede a job. They are used in the job list menu to
@@ -149,15 +153,15 @@ class CrontabParser:
         """
         if not tokens:
             return False
-        last_token: str = tokens[-1]
+        last_token: Token = tokens[-1]
         return isinstance(last_token, Comment) and last_token.value.startswith("##")
 
     @staticmethod
     def _is_variable(line: str) -> bool:
-        return "=" in line and bool(re.match(r"[a-zA-Z_][a-zA-Z0-9_]*", line))
+        return "=" in line and bool(re.match(r"[a-zA-Z_]", line))
 
     @staticmethod
-    def _split_identifier_and_value(line: str) -> tuple:
+    def _split_identifier_and_value(line: str) -> tuple[str, str]:
         identifier, value = line.split("=", maxsplit=1)
         return identifier.strip(), value.strip()
 
@@ -169,32 +173,32 @@ class CrontabParser:
 class Crontab:
     DEFAULT_SHELL: str = "/bin/sh"
 
-    def __init__(self, nodes: list) -> None:
-        self.nodes: list = nodes
+    def __init__(self, tokens: list[Token]) -> None:
+        self.tokens: list[Token] = tokens
         self._shell: str = ""
 
     @property
-    def jobs(self) -> list:
-        return [node for node in self.nodes if isinstance(node, CronJob)]
+    def jobs(self) -> list[CronJob]:
+        return [token for token in self.tokens if isinstance(token, CronJob)]
 
     def __bool__(self) -> bool:
         return len(self.jobs) > 0
 
     def run(self, job: CronJob) -> None:
-        if job not in self.nodes:
+        if job not in self.tokens:
             raise ValueError(f"Unknown job: {job}.")
         self._shell = self.DEFAULT_SHELL
-        out: list = self._extract_variables_and_target_job(job)
+        out: list[str] = self._extract_variables_and_target_command(job)
         subprocess.run([self._shell, "-c", ";".join(out)], cwd=Path().home())
 
-    def _extract_variables_and_target_job(self, job: CronJob) -> list:
-        out: list = []
-        for node in self.nodes:
-            if isinstance(node, Variable):
-                self._detect_shell_change(node)
-                out.append(node.declaration)
-            elif node == job:
-                out.append(node.job)
+    def _extract_variables_and_target_command(self, job: CronJob) -> list[str]:
+        out: list[str] = []
+        for token in self.tokens:
+            if isinstance(token, Variable):
+                self._detect_shell_change(token)
+                out.append(token.declaration)
+            elif token == job:
+                out.append(cast(CronJob, token).command)
                 break  # Variables coming after the job are not used.
         return out
 
@@ -205,20 +209,20 @@ class Crontab:
 
 def get_crontab() -> Crontab:
     crontab: str = CrontabReader().read()
-    nodes: list = CrontabParser().parse(crontab)
-    return Crontab(nodes)
+    tokens: list[Token] = CrontabParser().parse(crontab)
+    return Crontab(tokens)
 
 
 def _color_error(string: str) -> str:
-    return "\033[0;91m{}\033[0m".format(string)
+    return "\x1b[0;91m{}\x1b[0m".format(string)
 
 
 def _color_highlight(string: str) -> str:
-    return "\033[0;92m{}\033[0m".format(string)
+    return "\x1b[0;92m{}\x1b[0m".format(string)
 
 
 def _color_attenuate(string: str) -> str:
-    return "\033[0;90m{}\033[0m".format(string)
+    return "\x1b[0;90m{}\x1b[0m".format(string)
 
 
 def main() -> int:
@@ -236,10 +240,10 @@ def main() -> int:
 
     # Print jobs available, numbered.
     for i, job in enumerate(crontab.jobs):
-        job_number: str = _color_highlight(str(i + 1) + ".")
+        job_number: str = _color_highlight(f"{i + 1}.")
         description: str = f"{job.description} " if job.description else ""
         schedule: str = _color_attenuate(job.schedule)
-        command: str = _color_attenuate(job.job) if description else job.job
+        command: str = _color_attenuate(job.command) if description else job.command
         print(f"{job_number} {description}{schedule} {command}")
 
     job_selected: str = input(">>> Select a job to run: ")
@@ -254,7 +258,7 @@ def main() -> int:
         return 1
 
     job: CronJob = crontab.jobs[job_index]
-    print(_color_highlight("$"), job.job)
+    print(_color_highlight("$"), job.command)
     crontab.run(job)
 
     return 0

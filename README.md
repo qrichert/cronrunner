@@ -31,7 +31,7 @@ FOO=bar
 
 ## Installation
 
-- Requires Python 3.9+
+- Requires Python 3.12+
 
 ### Directly
 

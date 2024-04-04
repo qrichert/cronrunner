@@ -63,7 +63,7 @@ class TestCrontabReader(unittest.TestCase):
 class TestCrontabParser(unittest.TestCase):
     def test_regular_crontab(self) -> None:
         parser = CrontabParser()
-        nodes: list = parser.parse(
+        tokens: list = parser.parse(
             """
             # CronRunner Demo
             # ---------------
@@ -85,12 +85,14 @@ class TestCrontabParser(unittest.TestCase):
             """
         )
         self.assertListEqual(
-            nodes,
+            tokens,
             [
                 Comment(value="# CronRunner Demo"),
                 Comment(value="# ---------------"),
                 CronJob(
-                    schedule="@reboot", job="/usr/bin/bash ~/startup.sh", description=""
+                    schedule="@reboot",
+                    command="/usr/bin/bash ~/startup.sh",
+                    description="",
                 ),
                 Comment(
                     value="# Double-hash comments (##) immediately preceding a job are used as"
@@ -99,28 +101,30 @@ class TestCrontabParser(unittest.TestCase):
                 Comment(value="## Update brew."),
                 CronJob(
                     schedule="30 20 * * *",
-                    job="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
+                    command="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
                     description="Update brew.",
                 ),
                 Variable(identifier="FOO", value="bar"),
                 Comment(value="## Print variable."),
                 CronJob(
-                    schedule="* * * * *", job="echo $FOO", description="Print variable."
+                    schedule="* * * * *",
+                    command="echo $FOO",
+                    description="Print variable.",
                 ),
                 Comment(value="# Do nothing (this is a regular comment)."),
-                CronJob(schedule="@reboot", job=":", description=""),
+                CronJob(schedule="@reboot", command=":", description=""),
             ],
         )
 
     def test_description_detection_does_not_fail_if_nothing_precedes_job(self) -> None:
         parser = CrontabParser()
-        nodes: list = parser.parse("* * * * * printf 'hello, world'")
+        tokens: list = parser.parse("* * * * * printf 'hello, world'")
         self.assertListEqual(
-            nodes,
+            tokens,
             [
                 CronJob(
                     schedule="* * * * *",
-                    job="printf 'hello, world'",
+                    command="printf 'hello, world'",
                     description="",
                 )
             ],
@@ -128,9 +132,9 @@ class TestCrontabParser(unittest.TestCase):
 
     def test_unknown_job_shortcut(self) -> None:
         parser = CrontabParser()
-        nodes: list = parser.parse("# The following line is unknown:\nunknown :")
+        tokens: list = parser.parse("# The following line is unknown:\nunknown :")
         self.assertListEqual(
-            nodes,
+            tokens,
             [
                 Comment(value="# The following line is unknown:"),
                 Unknown(value="unknown :"),
@@ -139,9 +143,9 @@ class TestCrontabParser(unittest.TestCase):
 
     def test_whitespace_is_cleared_around_variables(self) -> None:
         parser = CrontabParser()
-        nodes: list = parser.parse("   FOO     =   bar   ")
+        tokens: list = parser.parse("   FOO     =   bar   ")
         self.assertListEqual(
-            nodes,
+            tokens,
             [
                 Variable(identifier="FOO", value="bar"),
             ],
@@ -149,11 +153,11 @@ class TestCrontabParser(unittest.TestCase):
 
     def test_variable_with_value_containing_equal_sign(self) -> None:
         parser = CrontabParser()
-        nodes: list = parser.parse(
+        tokens: list = parser.parse(
             "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
         )
         self.assertListEqual(
-            nodes,
+            tokens,
             [
                 Variable(
                     identifier="DBUS_SESSION_BUS_ADDRESS",
@@ -164,13 +168,13 @@ class TestCrontabParser(unittest.TestCase):
 
     def test_extra_whitespace_in_schedule_is_ignored(self) -> None:
         parser = CrontabParser()
-        nodes: list = parser.parse("*   *    *   *   * printf 'hello, world'")
+        tokens: list = parser.parse("*   *    *   *   * printf 'hello, world'")
         self.assertListEqual(
-            nodes,
+            tokens,
             [
                 CronJob(
                     schedule="*   *    *   *   *",
-                    job="printf 'hello, world'",
+                    command="printf 'hello, world'",
                     description="",
                 )
             ],
@@ -180,12 +184,12 @@ class TestCrontabParser(unittest.TestCase):
 class TestCrontab(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.nodes: list = [
+        cls.tokens: list = [
             Comment(value="# CronRunner Demo"),
             Comment(value="# ---------------"),
             CronJob(
                 schedule="@reboot",
-                job="/usr/bin/bash ~/startup.sh",
+                command="/usr/bin/bash ~/startup.sh",
                 description="",
             ),
             Comment(
@@ -195,26 +199,26 @@ class TestCrontab(unittest.TestCase):
             Comment(value="## Update brew."),
             CronJob(
                 schedule="30 20 * * *",
-                job="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
+                command="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
                 description="Update brew.",
             ),
             Variable(identifier="FOO", value="bar"),
             Comment(value="## Print variable."),
             CronJob(
                 schedule="* * * * *",
-                job="echo $FOO",
+                command="echo $FOO",
                 description="Print variable.",
             ),
             Comment(value="# Do nothing (this is a regular comment)."),
             CronJob(
                 schedule="@reboot",
-                job=":",
+                command=":",
                 description="",
             ),
             Variable(identifier="SHELL", value="/bin/bash"),
             CronJob(
                 schedule="@hourly",
-                job="echo 'I am echoed by bash!'",
+                command="echo 'I am echoed by bash!'",
                 description="",
             ),
         ]
@@ -227,7 +231,7 @@ class TestCrontab(unittest.TestCase):
         self.assertEqual(Crontab.DEFAULT_SHELL, "/bin/sh")
 
     def test_bool_true(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         self.assertTrue(bool(crontab))
 
     def test_bool_false(self) -> None:
@@ -235,13 +239,13 @@ class TestCrontab(unittest.TestCase):
         self.assertFalse(bool(crontab))
 
     def test_list_of_jobs(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         self.assertListEqual(
-            crontab.jobs, [node for node in self.nodes if isinstance(node, CronJob)]
+            crontab.jobs, [token for token in self.tokens if isinstance(token, CronJob)]
         )
 
     def test_working_directory_is_home_directory(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         crontab.run(crontab.jobs[0])
         self.assertEqual(
             self.subprocess_run_mock.call_args.kwargs["cwd"],
@@ -249,28 +253,28 @@ class TestCrontab(unittest.TestCase):
         )
 
     def test_run_cron_without_variable(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         crontab.run(crontab.jobs[0])
         self.subprocess_run_mock.assert_called_with(
             [Crontab.DEFAULT_SHELL, "-c", "/usr/bin/bash ~/startup.sh"], **CWD
         )
 
     def test_run_cron_with_variable(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         crontab.run(crontab.jobs[2])
         self.subprocess_run_mock.assert_called_with(
             [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;echo $FOO"], **CWD
         )
 
     def test_run_cron_after_variable_but_not_stuck_to_it(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         crontab.run(crontab.jobs[3])
         self.subprocess_run_mock.assert_called_with(
             [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;:"], **CWD
         )
 
     def test_run_cron_with_default_shell(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         crontab.run(crontab.jobs[0])
         self.assertEqual(
             self.subprocess_run_mock.call_args.args[0][0],
@@ -278,7 +282,7 @@ class TestCrontab(unittest.TestCase):
         )
 
     def test_run_cron_with_different_shell(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         crontab.run(crontab.jobs[4])
         self.assertEqual(self.subprocess_run_mock.call_args.args[0][0], "/bin/bash")
         self.subprocess_run_mock.assert_called_with(
@@ -287,7 +291,7 @@ class TestCrontab(unittest.TestCase):
         )
 
     def test_shell_is_reset_between_two_executions(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
 
         crontab.run(crontab.jobs[4])
         self.assertEqual(self.subprocess_run_mock.call_count, 1)
@@ -301,9 +305,9 @@ class TestCrontab(unittest.TestCase):
         )
 
     def test_run_job_not_in_crontab(self) -> None:
-        crontab = Crontab(self.nodes)
+        crontab = Crontab(self.tokens)
         with self.assertRaises(ValueError):
-            crontab.run(CronJob(schedule="", job="", description=""))
+            crontab.run(CronJob(schedule="", command="", description=""))
 
 
 class TestGetCrontab(unittest.TestCase):
@@ -321,17 +325,17 @@ class TestGetCrontab(unittest.TestCase):
         cronrunner.subprocess.run = Mock(return_value=run_result)
         crontab: Crontab = get_crontab()
         self.assertEqual(
-            crontab.nodes,
+            crontab.tokens,
             [
                 CronJob(
                     schedule="@reboot",
-                    job="/usr/bin/bash ~/startup.sh",
+                    command="/usr/bin/bash ~/startup.sh",
                     description="",
                 ),
                 Comment(value="## Update brew."),
                 CronJob(
                     schedule="30 20 * * *",
-                    job="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
+                    command="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
                     description="Update brew.",
                 ),
             ],
