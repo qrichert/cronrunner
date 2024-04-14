@@ -2,8 +2,5 @@
 /.vscode/
 
 /_wip/
+/target/
 /var/*
-
-/.venv/
-/node_modules/
-__pycache__/

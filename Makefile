@@ -25,46 +25,66 @@ all: help
 help: ## Show this help message
 	@$(show_help_message)
 
+.PHONY: clean
+clean: ## Clean project files
+	@cargo clean
+
+.PHONY: r
+r: run
+.PHONY: run
+run: ## Build and run program
+	@cargo run
+
+.PHONY: b
+b: build
+.PHONY: build
+build: ## Make optimized release build
+	@cargo build --release
+
 .PHONY: l
 l: lint
 .PHONY: lint
 lint: ## Run various linting tools
 	@pre-commit run --all-files
 
+.PHONY: check
+check: ## Dry compilation run
+	@cargo fmt
+	@cargo doc --no-deps --all-features
+	@cargo check
+	@cargo clippy --all-targets --all-features -- -W clippy::pedantic -W clippy::style -D warnings
+	@make test
+
 .PHONY: t
 t: test
 .PHONY: test
 test: ## Run unit tests
-	@python -m unittest
+	@cargo test
+
+.PHONY: doc
+doc: ## Build documentation
+	@cargo doc
 
 .PHONY: c
 c: coverage
 .PHONY: coverage
 coverage: ## Unit tests coverage report
-	@python -m coverage run -m unittest
-	@python -m coverage html -d var/htmlcov
-	@open var/htmlcov/index.html || xdg-open var/htmlcov/index.html || :
+	@cargo tarpaulin --engine Llvm --out Html --output-dir var/
+	@open var/tarpaulin-report.html || xdg-open var/tarpaulin-report.html || :
 
 .PHONY: coverage-pct
 coverage-pct: ## Ensure code coverage == 100%
-	@python -m coverage run -m unittest > /dev/null 2>&1 || :
-	@python -m coverage json -q -o /dev/stdout | python -c \
-		'import decimal, json, sys; \
-		coverage = json.loads(input(), parse_float=decimal.Decimal); \
-		percent_covered = coverage["totals"]["percent_covered"]; \
-		print(percent_covered); \
-		sys.exit(0 if percent_covered == 100 else 1);'
-
-.PHONY: b
-b: build
-.PHONY: build
-build: ## Build cronrunner
-	python -m build
+	@coverage=$$(cargo tarpaulin --engine Llvm --out Stdout 2>&1); \
+		percent_covered=$$(echo "$$coverage" | grep -o '^[0-9]\+\.[0-9]\+% coverage' | cut -d'%' -f1); \
+		echo $$percent_covered; \
+		[[ $$(echo "$$percent_covered == 100" | bc -l) -eq 0 ]] && exit 1; \
+		exit 0
 
 .PHONY: install
 install: ## Install cronrunner
+	@make build
 	install -d $(PREFIX)/bin/
-	install ./cronrunner/cronrunner.py $(PREFIX)/bin/cronrunner
+	install ./target/release/cronrunner $(PREFIX)/bin/cronrunner
 
 %:
 	@$(call show_error_message,Unknown command '$@')

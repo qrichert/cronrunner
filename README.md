@@ -1,8 +1,8 @@
 # cronrunner
 
-_Run cron jobs manually._
+_Run cron jobs manually._[^1]
 
-```console
+```
 $ cronrunner
 1. @reboot /usr/bin/bash ~/startup.sh
 2. Update brew. 30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
@@ -31,9 +31,15 @@ FOO=bar
 
 ## Installation
 
-- Requires Python 3.12+
-
+<!--
 ### Directly
+
+```console
+$ wget https://github.com/qrichert/cronrunner/...
+```
+
+### Manual Build
+-->
 
 ```console
 $ git clone https://github.com/qrichert/cronrunner.git
@@ -41,8 +47,4 @@ $ cd cronrunner
 $ sudo make install
 ```
 
-### Through `pip`
-
-```console
-$ python3 -m pip install git+https://github.com/qrichert/cronrunner.git
-```
+[^1]: cronrunner used to be a Python project, see [v1.1.4](1.1.4).

@@ -20,6 +20,7 @@ from cronrunner.cronrunner import (
 CWD: dict[str, Path] = {"cwd": Path().home()}
 
 
+# TODO(do-in-integration)
 class TestCrontabReader(unittest.TestCase):
     def setUp(self) -> None:
         self.subprocess_run_mock = Mock()
@@ -58,127 +59,6 @@ class TestCrontabReader(unittest.TestCase):
         reader = CrontabReader()
         with self.assertRaises(CrontabReadError):
             reader.read()
-
-
-class TestCrontabParser(unittest.TestCase):
-    def test_regular_crontab(self) -> None:
-        parser = CrontabParser()
-        tokens: list = parser.parse(
-            """
-            # CronRunner Demo
-            # ---------------
-
-            @reboot /usr/bin/bash ~/startup.sh
-
-            # Double-hash comments (##) immediately preceding a job are used as
-            # description. See below:
-
-            ## Update brew.
-            30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
-
-            FOO=bar
-            ## Print variable.
-            * * * * * echo $FOO
-
-            # Do nothing (this is a regular comment).
-            @reboot :
-            """
-        )
-        self.assertListEqual(
-            tokens,
-            [
-                Comment(value="# CronRunner Demo"),
-                Comment(value="# ---------------"),
-                CronJob(
-                    schedule="@reboot",
-                    command="/usr/bin/bash ~/startup.sh",
-                    description="",
-                ),
-                Comment(
-                    value="# Double-hash comments (##) immediately preceding a job are used as"
-                ),
-                Comment(value="# description. See below:"),
-                Comment(value="## Update brew."),
-                CronJob(
-                    schedule="30 20 * * *",
-                    command="/usr/local/bin/brew update && /usr/local/bin/brew upgrade",
-                    description="Update brew.",
-                ),
-                Variable(identifier="FOO", value="bar"),
-                Comment(value="## Print variable."),
-                CronJob(
-                    schedule="* * * * *",
-                    command="echo $FOO",
-                    description="Print variable.",
-                ),
-                Comment(value="# Do nothing (this is a regular comment)."),
-                CronJob(schedule="@reboot", command=":", description=""),
-            ],
-        )
-
-    def test_description_detection_does_not_fail_if_nothing_precedes_job(self) -> None:
-        parser = CrontabParser()
-        tokens: list = parser.parse("* * * * * printf 'hello, world'")
-        self.assertListEqual(
-            tokens,
-            [
-                CronJob(
-                    schedule="* * * * *",
-                    command="printf 'hello, world'",
-                    description="",
-                )
-            ],
-        )
-
-    def test_unknown_job_shortcut(self) -> None:
-        parser = CrontabParser()
-        tokens: list = parser.parse("# The following line is unknown:\nunknown :")
-        self.assertListEqual(
-            tokens,
-            [
-                Comment(value="# The following line is unknown:"),
-                Unknown(value="unknown :"),
-            ],
-        )
-
-    def test_whitespace_is_cleared_around_variables(self) -> None:
-        parser = CrontabParser()
-        tokens: list = parser.parse("   FOO     =   bar   ")
-        self.assertListEqual(
-            tokens,
-            [
-                Variable(identifier="FOO", value="bar"),
-            ],
-        )
-
-    def test_variable_with_value_containing_equal_sign(self) -> None:
-        parser = CrontabParser()
-        tokens: list = parser.parse(
-            "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
-        )
-        self.assertListEqual(
-            tokens,
-            [
-                Variable(
-                    identifier="DBUS_SESSION_BUS_ADDRESS",
-                    value="unix:path=/run/user/1000/bus",
-                ),
-            ],
-        )
-
-    def test_extra_whitespace_in_schedule_is_ignored(self) -> None:
-        parser = CrontabParser()
-        tokens: list = parser.parse("*   *    *   *   * printf 'hello, world'")
-        self.assertListEqual(
-            tokens,
-            [
-                CronJob(
-                    schedule="*   *    *   *   *",
-                    command="printf 'hello, world'",
-                    description="",
-                )
-            ],
-        )
 
 
 class TestCrontab(unittest.TestCase):
@@ -227,111 +107,42 @@ class TestCrontab(unittest.TestCase):
         self.subprocess_run_mock = Mock()
         cronrunner.subprocess.run = self.subprocess_run_mock
 
-    def test_default_shell(self) -> None:
-        self.assertEqual(Crontab.DEFAULT_SHELL, "/bin/sh")
+    # TODO(redo-in-integration)
+    # def test_working_directory_is_home_directory(self) -> None:
+    #     crontab = Crontab(self.tokens)
+    #     crontab.run(crontab.jobs[0])
+    #     self.assertEqual(
+    #         self.subprocess_run_mock.call_args.kwargs["cwd"],
+    #         Path().home(),
+    #     )
 
-    def test_bool_true(self) -> None:
-        crontab = Crontab(self.tokens)
-        self.assertTrue(bool(crontab))
+    # TODO(redo-in-integration)
+    # def test_run_cron_without_variable(self) -> None:
+    #     crontab = Crontab(self.tokens)
+    #     crontab.run(crontab.jobs[0])
+    #     self.subprocess_run_mock.assert_called_with(
+    #         [Crontab.DEFAULT_SHELL, "-c", "/usr/bin/bash ~/startup.sh"], **CWD
+    #     )
 
-    def test_bool_false(self) -> None:
-        crontab = Crontab([])
-        self.assertFalse(bool(crontab))
+    # TODO(redo-in-integration)
+    # def test_run_cron_with_variable(self) -> None:
+    #     crontab = Crontab(self.tokens)
+    #     crontab.run(crontab.jobs[2])
+    #     self.subprocess_run_mock.assert_called_with(
+    #         [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;echo $FOO"], **CWD
+    #     )
 
-    def test_list_of_jobs(self) -> None:
-        crontab = Crontab(self.tokens)
-        self.assertListEqual(
-            crontab.jobs, [token for token in self.tokens if isinstance(token, CronJob)]
-        )
+    # TODO(redo-in-integration)
+    # def test_run_cron_after_variable_but_not_right_after_it(self) -> None:
 
-    def test_working_directory_is_home_directory(self) -> None:
-        crontab = Crontab(self.tokens)
-        crontab.run(crontab.jobs[0])
-        self.assertEqual(
-            self.subprocess_run_mock.call_args.kwargs["cwd"],
-            Path().home(),
-        )
+    # TODO(redo-in-integration)
+    # def test_shell_is_reset_between_two_executions(self) -> None:
 
-    def test_run_cron_without_variable(self) -> None:
-        crontab = Crontab(self.tokens)
-        crontab.run(crontab.jobs[0])
-        self.subprocess_run_mock.assert_called_with(
-            [Crontab.DEFAULT_SHELL, "-c", "/usr/bin/bash ~/startup.sh"], **CWD
-        )
-
-    def test_run_cron_with_variable(self) -> None:
-        crontab = Crontab(self.tokens)
-        crontab.run(crontab.jobs[2])
-        self.subprocess_run_mock.assert_called_with(
-            [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;echo $FOO"], **CWD
-        )
-
-    def test_run_cron_after_variable_but_not_stuck_to_it(self) -> None:
-        crontab = Crontab(self.tokens)
-        crontab.run(crontab.jobs[3])
-        self.subprocess_run_mock.assert_called_with(
-            [Crontab.DEFAULT_SHELL, "-c", "FOO=bar;:"], **CWD
-        )
-
-    def test_run_cron_with_default_shell(self) -> None:
-        crontab = Crontab(self.tokens)
-        crontab.run(crontab.jobs[0])
-        self.assertEqual(
-            self.subprocess_run_mock.call_args.args[0][0],
-            Crontab.DEFAULT_SHELL,
-        )
-
-    def test_run_cron_with_different_shell(self) -> None:
-        crontab = Crontab(self.tokens)
-        crontab.run(crontab.jobs[4])
-        self.assertEqual(self.subprocess_run_mock.call_args.args[0][0], "/bin/bash")
-        self.subprocess_run_mock.assert_called_with(
-            ["/bin/bash", "-c", "FOO=bar;SHELL=/bin/bash;echo 'I am echoed by bash!'"],
-            **CWD,
-        )
-
-    def test_shell_is_reset_between_two_executions(self) -> None:
-        crontab = Crontab(self.tokens)
-
-        crontab.run(crontab.jobs[4])
-        self.assertEqual(self.subprocess_run_mock.call_count, 1)
-        self.assertEqual(self.subprocess_run_mock.call_args.args[0][0], "/bin/bash")
-
-        crontab.run(crontab.jobs[0])
-        self.assertEqual(self.subprocess_run_mock.call_count, 2)
-        self.assertEqual(
-            self.subprocess_run_mock.call_args.args[0][0],
-            Crontab.DEFAULT_SHELL,
-        )
-
+    # TODO(do-in-integration)
     def test_run_job_not_in_crontab(self) -> None:
         crontab = Crontab(self.tokens)
         with self.assertRaises(ValueError):
             crontab.run(CronJob(schedule="", command="", description=""))
-
-    def test_two_equal_jobs_are_treated_as_different_jobs(self) -> None:
-        crontab = Crontab(
-            [
-                CronJob(
-                    schedule="@daily",
-                    command="df -h > ~/track_disk_usage.txt",
-                    description="Track disk usage.",
-                ),
-                Variable(identifier="FOO", value="bar"),
-                CronJob(
-                    schedule="@daily",
-                    command="df -h > ~/track_disk_usage.txt",
-                    description="Track disk usage.",
-                ),
-            ]
-        )
-        crontab.run(crontab.jobs[1])
-        # If 'FOO=bar' is not included, it means the first of the twin
-        # jobs was used instead of the second that we selected.
-        self.subprocess_run_mock.assert_called_with(
-            ["/bin/sh", "-c", "FOO=bar;df -h > ~/track_disk_usage.txt"],
-            **CWD,
-        )
 
 
 class TestGetCrontab(unittest.TestCase):
