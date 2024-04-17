@@ -154,12 +154,16 @@ impl Parser {
             return false;
         }
         let first_char = line.chars().nth(0).unwrap();
-        // ^[a-zA-Z_]
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_".contains(first_char)
+        // ^[a-zA-Z_"']
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\"'".contains(first_char)
     }
 
     fn make_variable_token(line: &str) -> Token {
-        let (identifier, value) = Self::split_identifier_and_value(line);
+        let (mut identifier, mut value) = Self::split_identifier_and_value(line);
+
+        identifier = Self::trim_quotes(identifier);
+        value = Self::trim_quotes(value);
+
         Token::Variable(Variable {
             identifier: String::from(identifier),
             value: String::from(value),
@@ -167,10 +171,20 @@ impl Parser {
     }
 
     fn split_identifier_and_value(line: &str) -> (&str, &str) {
+        // Even quoted, variable names cannot contain an `=` sign.
         let (identifier, value) = line
             .split_once('=')
             .expect("the string contains an '=' sign");
         (identifier.trim(), value.trim())
+    }
+
+    fn trim_quotes(subject: &str) -> &str {
+        if subject.starts_with('"') && subject.ends_with('"')
+            || subject.starts_with('\'') && subject.ends_with('\'')
+        {
+            return &subject[1..subject.len() - 1];
+        }
+        subject
     }
 
     fn is_comment(line: &str) -> bool {
@@ -365,6 +379,162 @@ mod tests {
             vec![Token::Variable(Variable {
                 identifier: String::from("DBUS_SESSION_BUS_ADDRESS"),
                 value: String::from("unix:path=/run/user/1000/bus")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_identifier_with_single_quotes() {
+        let tokens = Parser::parse("'FOO'=bar");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_identifier_with_double_quotes() {
+        let tokens = Parser::parse("\"FOO\"=bar");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_value_with_single_quotes() {
+        let tokens = Parser::parse("FOO='bar'");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_value_with_double_quotes() {
+        let tokens = Parser::parse("FOO=\"bar\"");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_identifier_and_value_with_double_quotes() {
+        let tokens = Parser::parse("\"FOO\"=\"bar\"");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_identifier_and_value_with_single_quotes() {
+        let tokens = Parser::parse("'FOO'='bar'");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_identifier_with_quoted_double_quotes() {
+        let tokens = Parser::parse("'\"FOO\"'=bar");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("\"FOO\""),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_identifier_with_quoted_single_quotes() {
+        let tokens = Parser::parse("\"'FOO'\"=bar");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("'FOO'"),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_value_with_quoted_double_quotes() {
+        let tokens = Parser::parse("FOO='\"bar\"'");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("\"bar\"")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_value_with_quoted_single_quotes() {
+        let tokens = Parser::parse("FOO=\"'bar'\"");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("'bar'")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_quoted_identifier_with_spaces() {
+        let tokens = Parser::parse("'   FOO   BAZ   '=bar");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("   FOO   BAZ   "),
+                value: String::from("bar")
+            })],
+        );
+    }
+
+    #[test]
+    fn variable_unquoted_value_with_hash() {
+        let tokens = Parser::parse("FOO=bar # baz");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar # baz")
             })],
         );
     }

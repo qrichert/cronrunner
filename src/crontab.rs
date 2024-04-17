@@ -30,8 +30,8 @@ const DEFAULT_SHELL: &str = "/bin/sh";
 
 #[derive(Debug)]
 struct ShellCommand {
-    home_directory: String,
     shell: String,
+    home: String,
     command: String,
 }
 
@@ -176,7 +176,7 @@ impl Crontab {
         };
 
         let status = Command::new(command.shell)
-            .current_dir(command.home_directory)
+            .current_dir(command.home)
             .arg("-c")
             .arg(command.command)
             .status();
@@ -198,34 +198,24 @@ impl Crontab {
     }
 
     fn make_shell_command(&self, job: &CronJob) -> Result<ShellCommand, String> {
-        let home_directory = Self::get_home_directory()?;
-        let (shell, command) = self.convert_job_to_command(job)?;
+        let (shell, home, command) = self.convert_job_to_command(job)?;
 
         Ok(ShellCommand {
-            home_directory,
             shell,
+            home,
             command,
         })
     }
 
-    fn get_home_directory() -> Result<String, String> {
-        if let Ok(home_directory) = env::var("HOME") {
-            Ok(home_directory)
-        } else {
-            Err(String::from(
-                "Could not read Home directory from environment.",
-            ))
-        }
-    }
-
-    fn convert_job_to_command(&self, job: &CronJob) -> Result<(String, String), String> {
+    fn convert_job_to_command(&self, job: &CronJob) -> Result<(String, String, String), String> {
         self.ensure_job_exists(job)?;
         let vars_and_job = self.extract_variables_and_target_job(job);
 
         let shell = Self::determine_shell_to_use(&vars_and_job);
+        let home = Self::determine_home_to_use(&vars_and_job)?;
         let command = Self::variables_and_job_to_shell_command(&vars_and_job);
 
-        Ok((shell, command))
+        Ok((shell, home, command))
     }
 
     fn ensure_job_exists(&self, job: &CronJob) -> Result<(), String> {
@@ -262,6 +252,28 @@ impl Crontab {
         shell
     }
 
+    fn determine_home_to_use(tokens: &Vec<&Token>) -> Result<String, String> {
+        let mut home = Self::get_home_directory()?;
+        for token in tokens {
+            if let Token::Variable(variable) = token {
+                if variable.identifier == "HOME" {
+                    home = String::from(&variable.value);
+                }
+            }
+        }
+        Ok(home)
+    }
+
+    fn get_home_directory() -> Result<String, String> {
+        if let Ok(home_directory) = env::var("HOME") {
+            Ok(home_directory)
+        } else {
+            Err(String::from(
+                "Could not read Home directory from environment.",
+            ))
+        }
+    }
+
     fn variables_and_job_to_shell_command(tokens: &Vec<&Token>) -> String {
         let mut command: Vec<String> = Vec::new();
         for token in tokens {
@@ -271,6 +283,10 @@ impl Crontab {
                 command.push(String::from(&job.command));
             }
         }
+        // TODO: This is wrong, because crontab variables are handled
+        //  differently than in the shell. Contrary to the shell,
+        //  crontab doesn't do substitutions, allows quoted names, and
+        //  an unquoted '#' in the value has no meaning (not a comment).
         command.join(";")
     }
 }
@@ -371,6 +387,16 @@ mod tests {
                 uid: 5,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by bash!'"),
+                description: String::new(),
+            }),
+            Token::Variable(Variable {
+                identifier: String::from("HOME"),
+                value: String::from("/home/<custom>"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 6,
+                schedule: String::from("@yerly"),
+                command: String::from("./cleanup.sh"),
                 description: String::new(),
             }),
         ]
@@ -643,6 +669,38 @@ mod tests {
     }
 
     #[test]
+    fn run_cron_with_default_home() {
+        env::set_var("HOME", "/home/<default>");
+
+        let crontab = Crontab::new(tokens());
+
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
+        let command = crontab
+            .make_shell_command(job)
+            .expect("job exists in fixture");
+
+        assert_eq!(command.home, "/home/<default>");
+    }
+
+    #[test]
+    fn run_cron_with_different_home() {
+        env::set_var("HOME", "/home/<default>");
+
+        let crontab = Crontab::new(tokens());
+
+        let job = crontab.get_job_from_uid(6).expect("job exists in fixture");
+        let command = crontab
+            .make_shell_command(job)
+            .expect("job exists in fixture");
+
+        assert_eq!(command.home, "/home/<custom>");
+        assert_eq!(
+            command.command,
+            "FOO=bar;SHELL=/bin/bash;HOME=/home/<custom>;./cleanup.sh"
+        );
+    }
+
+    #[test]
     fn get_home_directory_error() {
         env::remove_var("HOME");
 
@@ -657,6 +715,43 @@ mod tests {
 
         // If we don't re-create it, other tests will fail.
         env::set_var("HOME", "/home/<test>");
+    }
+
+    #[test]
+    fn double_home_change() {
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("HOME"),
+                value: String::from("/home/user1"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'I run is user1's Home!'"),
+                description: String::new(),
+            }),
+            Token::Variable(Variable {
+                identifier: String::from("HOME"),
+                value: String::from("/home/user2"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 2,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'I run is user2's Home!'"),
+                description: String::new(),
+            }),
+        ]);
+
+        let job = crontab.get_job_from_uid(2).expect("job exists in fixture");
+        let command = crontab
+            .make_shell_command(job)
+            .expect("job exists in fixture");
+
+        assert_eq!(command.home, "/home/user2");
+        assert_eq!(
+            command.command,
+            "HOME=/home/user1;HOME=/home/user2;echo 'I run is user2's Home!'"
+        );
     }
 
     #[test]
