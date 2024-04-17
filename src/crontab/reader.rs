@@ -20,7 +20,7 @@ use std::process::{Command, Output};
 ///
 /// This is only meant to be used attached to a [`ReadError`], provided
 /// by [`Reader`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ReadErrorDetail {
     /// If the command succeeded with a non-zero exit code.
     NonZeroExit {
@@ -35,7 +35,7 @@ pub enum ReadErrorDetail {
 }
 
 /// Additional context, provided by [`Reader`] in case of an error.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ReadError {
     /// Explanation of the error in plain English.
     pub reason: String,
@@ -111,8 +111,88 @@ impl Reader {
     /// executable is missing.
     fn handle_output_err() -> Result<String, ReadError> {
         Err(ReadError {
-            reason: String::from("Unable to locate crontab executable on the system."),
+            reason: String::from("Unable to locate the crontab executable on the system."),
             detail: ReadErrorDetail::CouldNotRunCommand,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
+
+    #[test]
+    fn successful_read() {
+        let output = Output {
+            status: ExitStatus::from_raw(0),
+            stdout: "<stdout>".as_bytes().to_vec(),
+            stderr: "<stderr>".as_bytes().to_vec(),
+        };
+
+        let res = Reader::handle_output_ok(&output);
+        let res = res.expect("should be an ok");
+
+        assert_eq!(res, "<stdout>");
+    }
+
+    #[test]
+    fn unsuccessful_read() {
+        let output = Output {
+            status: ExitStatus::from_raw(1),
+            stdout: "<stdout>".as_bytes().to_vec(),
+            stderr: "<stderr>".as_bytes().to_vec(),
+        };
+
+        let res = Reader::handle_output_ok(&output);
+        let res = res.expect_err("should be an error");
+
+        assert_eq!(
+            res,
+            ReadError {
+                reason: String::from("Cannot read crontab of current user."),
+                detail: ReadErrorDetail::NonZeroExit {
+                    // For some reason, there seems to be no way to create a
+                    // proper `ExitStatus` from scratch. `::from_raw(1)` is
+                    // correctly interpreted as an error, but `.status.code()`
+                    // gives `None`. This is not a big problem because the case
+                    // is handled by the system tests.
+                    exit_code: None,
+                    stderr: Some(String::from("<stderr>")),
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn empty_stderr_string_gives_none() {
+        let output = Output {
+            status: ExitStatus::from_raw(1),
+            stdout: "<stdout>".as_bytes().to_vec(),
+            stderr: "".as_bytes().to_vec(), // Here.
+        };
+
+        let res = Reader::handle_output_ok(&output);
+        let res = res.expect_err("should be an error");
+
+        assert!(matches!(
+            res.detail,
+            ReadErrorDetail::NonZeroExit { stderr: None, .. }
+        ));
+    }
+
+    #[test]
+    fn error_with_command() {
+        let res = Reader::handle_output_err();
+        let res = res.expect_err("cannot be anything else than an error");
+
+        assert_eq!(
+            res,
+            ReadError {
+                reason: String::from("Unable to locate the crontab executable on the system."),
+                detail: ReadErrorDetail::CouldNotRunCommand,
+            }
+        );
     }
 }

@@ -200,19 +200,19 @@ mod tests {
             "
             # CronRunner Demo
             # ---------------
-    
+
             @reboot /usr/bin/bash ~/startup.sh
-    
+
             # Double-hash comments (##) immediately preceding a job are used as
             # description. See below:
-    
+
             ## Update brew.
             30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
-    
+
             FOO=bar
             ## Print variable.
             * * * * * echo $FOO
-    
+
             # Do nothing (this is a regular comment).
             @reboot :
             ",

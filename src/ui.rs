@@ -28,3 +28,32 @@ pub fn color_highlight(string: &str) -> String {
 pub fn color_attenuate(string: &str) -> String {
     format!("\x1b[0;90m{string}\x1b[0m")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn color_error_is_red() {
+        assert_eq!(
+            color_error("this is marked as error"),
+            "\x1b[0;91mthis is marked as error\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn color_highlight_is_green() {
+        assert_eq!(
+            color_highlight("this is highlighted"),
+            "\x1b[0;92mthis is highlighted\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn color_attenuate_is_grey() {
+        assert_eq!(
+            color_attenuate("this is attenuated"),
+            "\x1b[0;90mthis is attenuated\x1b[0m"
+        );
+    }
+}

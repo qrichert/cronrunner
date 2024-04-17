@@ -28,6 +28,7 @@ pub use self::tokens::{CronJob, Token};
 /// Default shell used if not overridden by a variable in the `crontab`.
 const DEFAULT_SHELL: &str = "/bin/sh";
 
+#[derive(Debug)]
 struct ShellCommand {
     home_directory: String,
     shell: String,
@@ -38,7 +39,7 @@ struct ShellCommand {
 ///
 /// This is only meant to be used attached to a [`RunResult`], provided
 /// by [`Crontab`].
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RunResultDetail {
     /// If the command could be run.
     DidRun {
@@ -54,7 +55,7 @@ pub enum RunResultDetail {
 }
 
 /// Info about a run, provided by [`Crontab`] once it is finished.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct RunResult {
     /// Whether the command was successful or not. _Successful_ means
     /// the command ran _AND_ exited without errors (exit 0).
@@ -305,6 +306,10 @@ mod tests {
     use super::tokens::{Comment, Variable};
     use super::*;
 
+    // Warning: These tests MUST be run sequentially. Running them in
+    // parallel threads may cause conflicts with environment variables,
+    // as a variable may be overridden before it is used.
+
     fn tokens() -> Vec<Token> {
         vec![
             Token::Comment(Comment {
@@ -495,6 +500,37 @@ mod tests {
     }
 
     #[test]
+    fn two_equal_jobs_are_treated_as_different_jobs() {
+        let crontab = Crontab::new(vec![
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("@daily"),
+                command: String::from("df -h > ~/track_disk_usage.txt"),
+                description: String::from("Track disk usage."),
+            }),
+            Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 2,
+                schedule: String::from("@daily"),
+                command: String::from("df -h > ~/track_disk_usage.txt"),
+                description: String::from("Track disk usage."),
+            }),
+        ]);
+
+        let job = crontab.get_job_from_uid(2).expect("job exists in fixture");
+        let command = crontab
+            .make_shell_command(job)
+            .expect("job exists in fixture");
+
+        // If 'FOO=bar' is not included, it means the first of the twin
+        // jobs was used instead of the second that we selected.
+        assert_eq!(command.command, "FOO=bar;df -h > ~/track_disk_usage.txt");
+    }
+
+    #[test]
     fn working_directory_is_home_directory() {
         env::set_var("HOME", "/home/<test>");
 
@@ -607,33 +643,41 @@ mod tests {
     }
 
     #[test]
-    fn two_equal_jobs_are_treated_as_different_jobs() {
-        let crontab = Crontab::new(vec![
-            Token::CronJob(CronJob {
-                uid: 1,
-                schedule: String::from("@daily"),
-                command: String::from("df -h > ~/track_disk_usage.txt"),
-                description: String::from("Track disk usage."),
-            }),
-            Token::Variable(Variable {
-                identifier: String::from("FOO"),
-                value: String::from("bar"),
-            }),
-            Token::CronJob(CronJob {
-                uid: 2,
-                schedule: String::from("@daily"),
-                command: String::from("df -h > ~/track_disk_usage.txt"),
-                description: String::from("Track disk usage."),
-            }),
-        ]);
+    fn get_home_directory_error() {
+        env::remove_var("HOME");
 
-        let job = crontab.get_job_from_uid(2).expect("job exists in fixture");
-        let command = crontab
+        let crontab = Crontab::new(tokens());
+
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
+        let error = crontab
             .make_shell_command(job)
-            .expect("job exists in fixture");
+            .expect_err("should be an error");
 
-        // If 'FOO=bar' is not included, it means the first of the twin
-        // jobs was used instead of the second that we selected.
-        assert_eq!(command.command, "FOO=bar;df -h > ~/track_disk_usage.txt");
+        assert_eq!(error, "Could not read Home directory from environment.");
+
+        // If we don't re-create it, other tests will fail.
+        env::set_var("HOME", "/home/<test>");
+    }
+
+    #[test]
+    fn run_cron_with_non_existing_job() {
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            schedule: String::from("@hourly"),
+            command: String::from("echo 'I am echoed by bash!'"),
+            description: String::new(),
+        })]);
+        let job_not_in_crontab = CronJob {
+            uid: 42,
+            schedule: String::from("@never"),
+            command: String::from("sleep infinity"),
+            description: String::new(),
+        };
+
+        let error = crontab
+            .make_shell_command(&job_not_in_crontab)
+            .expect_err("the job is not in the crontab");
+
+        assert_eq!(error, "The given job is not in the crontab.");
     }
 }
