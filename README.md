@@ -44,7 +44,12 @@ $ wget https://github.com/qrichert/cronrunner/...
 ```console
 $ git clone https://github.com/qrichert/cronrunner.git
 $ cd cronrunner
+$ make build
 $ sudo make install
+```
+
+```shell
+cargo install --git https://github.com/qrichert/cronrunner.git
 ```
 
 [^1]: cronrunner used to be a Python project, see [v1.1.4](1.1.4).

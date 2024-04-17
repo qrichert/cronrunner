@@ -82,7 +82,6 @@ coverage-pct: ## Ensure code coverage == 100%
 
 .PHONY: install
 install: ## Install cronrunner
-	@make build
 	install -d $(PREFIX)/bin/
 	install ./target/release/cronrunner $(PREFIX)/bin/cronrunner
 
