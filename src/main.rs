@@ -61,6 +61,7 @@ fn exit_from_crontab_read_error(error: ReadError) -> u8 {
 
     if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = error.detail {
         if let Some(stderr) = stderr {
+            let stderr = strip_terminating_newline(&stderr);
             eprintln!("{stderr}");
         }
         if let Some(exit_code) = exit_code {
@@ -70,6 +71,10 @@ fn exit_from_crontab_read_error(error: ReadError) -> u8 {
     }
 
     1u8
+}
+
+fn strip_terminating_newline(text: &str) -> &str {
+    text.strip_suffix('\n').unwrap_or(text)
 }
 
 fn exit_from_no_runnable_jobs() -> u8 {
@@ -220,6 +225,27 @@ mod tests {
         let exit_code = exit_from_crontab_read_error(error);
 
         assert_eq!(exit_code, 1u8);
+    }
+
+    #[test]
+    fn strip_terminating_newline_with_newline() {
+        let stripped_text = strip_terminating_newline("foo\nbar\n\n");
+
+        assert_eq!(stripped_text, "foo\nbar\n");
+    }
+
+    #[test]
+    fn strip_terminating_newline_without_newline() {
+        let stripped_text = strip_terminating_newline("foo\nbar");
+
+        assert_eq!(stripped_text, "foo\nbar");
+    }
+
+    #[test]
+    fn strip_terminating_newline_empty_string() {
+        let stripped_text = strip_terminating_newline("");
+
+        assert_eq!(stripped_text, "");
     }
 
     #[test]
