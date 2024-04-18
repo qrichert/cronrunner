@@ -4,10 +4,11 @@ version = "2.1.1"
 edition = "2021"
 authors = ["Quentin Richert <noreply@richert.co>"]
 description = "Run cron jobs manually."
-homepage = "https://github.com/qrichert/cronrunner"
+license = "GPL-3.0-or-later"
 repository = "https://github.com/qrichert/cronrunner.git"
 readme = "README.md"
-license = "GPL-3.0-or-later"
+keywords = ["cron", "crontab", "cli"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

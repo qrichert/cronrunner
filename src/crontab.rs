@@ -41,7 +41,7 @@ struct ShellCommand {
 ///
 /// This is only meant to be used attached to a [`RunResult`], provided
 /// by [`Crontab`].
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum RunResultDetail {
     /// If the command could be run.
     DidRun {
@@ -57,7 +57,7 @@ pub enum RunResultDetail {
 }
 
 /// Info about a run, provided by [`Crontab`] once it is finished.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct RunResult {
     /// Whether the command was successful or not. _Successful_ means
     /// the command ran _AND_ exited without errors (exit 0).
@@ -117,11 +117,7 @@ impl Crontab {
     /// Get a job object from its [`UID`](CronJob::uid).
     #[must_use]
     pub fn get_job_from_uid(&self, job_uid: u32) -> Option<&CronJob> {
-        if let Some(job) = self.jobs().iter().find(|job| job.uid == job_uid) {
-            Some(*job)
-        } else {
-            None
-        }
+        self.jobs().into_iter().find(|job| job.uid == job_uid)
     }
 
     /// Run a job.

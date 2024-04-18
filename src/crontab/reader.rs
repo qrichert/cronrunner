@@ -20,7 +20,7 @@ use std::process::{Command, Output};
 ///
 /// This is only meant to be used attached to a [`ReadError`], provided
 /// by [`Reader`].
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ReadErrorDetail {
     /// If the command succeeded with a non-zero exit code.
     NonZeroExit {
@@ -35,7 +35,7 @@ pub enum ReadErrorDetail {
 }
 
 /// Additional context, provided by [`Reader`] in case of an error.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ReadError {
     /// Explanation of the error in plain English.
     pub reason: String,
@@ -127,8 +127,8 @@ mod tests {
     fn successful_read() {
         let output = Output {
             status: ExitStatus::from_raw(0),
-            stdout: "<stdout>".as_bytes().to_vec(),
-            stderr: "<stderr>".as_bytes().to_vec(),
+            stdout: b"<stdout>".to_vec(),
+            stderr: b"<stderr>".to_vec(),
         };
 
         let res = Reader::handle_output_ok(&output);
@@ -141,8 +141,8 @@ mod tests {
     fn unsuccessful_read() {
         let output = Output {
             status: ExitStatus::from_raw(1),
-            stdout: "<stdout>".as_bytes().to_vec(),
-            stderr: "<stderr>".as_bytes().to_vec(),
+            stdout: b"<stdout>".to_vec(),
+            stderr: b"<stderr>".to_vec(),
         };
 
         let res = Reader::handle_output_ok(&output);
@@ -169,8 +169,8 @@ mod tests {
     fn empty_stderr_string_gives_none() {
         let output = Output {
             status: ExitStatus::from_raw(1),
-            stdout: "<stdout>".as_bytes().to_vec(),
-            stderr: "".as_bytes().to_vec(), // Here.
+            stdout: b"<stdout>".to_vec(),
+            stderr: b"".to_vec(), // Here.
         };
 
         let res = Reader::handle_output_ok(&output);

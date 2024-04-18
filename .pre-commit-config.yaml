@@ -13,8 +13,10 @@ repos:
         language: system
         types: [rust]
         entry:
-          cargo clippy --all-targets --all-features -- -W clippy::pedantic -W
-          clippy::style -D warnings
+          cargo clippy --all-targets --all-features -- -D warnings -W
+          clippy::all -W clippy::cargo -W clippy::complexity -W
+          clippy::correctness -W clippy::pedantic -W clippy::perf -W
+          clippy::style -W clippy::suspicious
         pass_filenames: false
       - id: doc
         name: doc

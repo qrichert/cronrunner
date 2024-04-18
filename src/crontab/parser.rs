@@ -80,7 +80,7 @@ impl Parser {
     }
 
     fn is_job(line: &str) -> bool {
-        let first_char = line.chars().nth(0).unwrap();
+        let first_char = line.chars().next().unwrap();
         // ^([0-9]|\*|@)
         "0123456789*@".contains(first_char)
     }
@@ -153,7 +153,7 @@ impl Parser {
         if !line.contains('=') {
             return false;
         }
-        let first_char = line.chars().nth(0).unwrap();
+        let first_char = line.chars().next().unwrap();
         // ^[a-zA-Z_"']
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\"'".contains(first_char)
     }

@@ -48,11 +48,12 @@ lint: ## Run various linting tools
 	@pre-commit run --all-files
 
 .PHONY: check
-check: ## Dry compilation run
+check: ## Most stringent checks (includes checks still in development)
+	@rustup update
 	@cargo fmt
 	@cargo doc --no-deps --all-features
 	@cargo check
-	@cargo clippy --all-targets --all-features -- -W clippy::pedantic -W clippy::style -D warnings
+	@cargo clippy --all-targets --all-features -- -D warnings -W clippy::all -W clippy::cargo -W clippy::complexity -W clippy::correctness -W clippy::nursery -W clippy::pedantic -W clippy::perf -W clippy::style -W clippy::suspicious
 	@make test
 
 .PHONY: t
@@ -69,11 +70,11 @@ doc: ## Build documentation
 c: coverage
 .PHONY: coverage
 coverage: ## Unit tests coverage report
-	@cargo tarpaulin --engine Llvm --out Html --output-dir target/
+	@cargo tarpaulin --engine Llvm --timeout 120 --out Html --output-dir target/
 	@open target/tarpaulin-report.html || xdg-open target/tarpaulin-report.html || :
 
 .PHONY: coverage-pct
-coverage-pct: ## Ensure code coverage == 100%
+coverage-pct: ## Ensure code coverage of 100%
 	@coverage=$$(cargo tarpaulin --engine Llvm --out Stdout 2>&1); \
 		percent_covered=$$(echo "$$coverage" | grep -o '^[0-9]\+\.[0-9]\+% coverage' | cut -d'%' -f1); \
 		echo $$percent_covered; \
