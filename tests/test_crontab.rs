@@ -92,7 +92,38 @@ fn correct_job_is_run() {
 
     let output = read_output_file("output_args");
 
-    assert_eq!(output.trim(), "-c SHELL=mock_shell;echo \":)\"");
+    assert_eq!(output.trim(), "-c echo \":)\"");
+}
+
+#[test]
+fn edge_cases_with_variables() {
+    mock_crontab("crontab_variables_edge_cases");
+    mock_shell("output_stdout_stderr_to_file");
+
+    let crontab = make_instance().expect("should be an ok");
+    let job = crontab.get_job_from_uid(1).expect("job exists");
+
+    let res = crontab.run(job);
+
+    assert!(res.was_successful);
+
+    let output = read_output_file("output_stdout_stderr");
+
+    assert_eq!(
+        output.trim().split_terminator('\n').collect::<Vec<&str>>(),
+        vec![
+            "double_quoted_identifier",
+            "single_quoted_identifier",
+            "double_quoted_value",
+            "single_quoted_value",
+            "double_quoted_identifier_and_value",
+            "single_quoted_identifier_and_value",
+            "quoted # hash",
+            "unquoted # hash",
+            "$UNEXPANDED_QUOTED",
+            "$UNEXPANDED_UNQUOTED",
+        ]
+    );
 }
 
 #[test]

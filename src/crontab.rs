@@ -18,6 +18,7 @@ pub mod parser;
 pub mod reader;
 pub mod tokens;
 
+use std::collections::HashMap;
 use std::env;
 use std::process::Command;
 
@@ -30,6 +31,7 @@ const DEFAULT_SHELL: &str = "/bin/sh";
 
 #[derive(Debug)]
 struct ShellCommand {
+    env: HashMap<String, String>,
     shell: String,
     home: String,
     command: String,
@@ -176,6 +178,8 @@ impl Crontab {
         };
 
         let status = Command::new(command.shell)
+            // .env_clear() // TODO: Cleaner env?
+            .envs(&command.env)
             .current_dir(command.home)
             .arg("-c")
             .arg(command.command)
@@ -198,24 +202,19 @@ impl Crontab {
     }
 
     fn make_shell_command(&self, job: &CronJob) -> Result<ShellCommand, String> {
-        let (shell, home, command) = self.convert_job_to_command(job)?;
+        self.ensure_job_exists(job)?;
+
+        let mut env = self.extract_variables(job);
+        let shell = Self::determine_shell_to_use(&mut env);
+        let home = Self::determine_home_to_use(&mut env)?;
+        let command = job.command.clone();
 
         Ok(ShellCommand {
+            env,
             shell,
             home,
             command,
         })
-    }
-
-    fn convert_job_to_command(&self, job: &CronJob) -> Result<(String, String, String), String> {
-        self.ensure_job_exists(job)?;
-        let vars_and_job = self.extract_variables_and_target_job(job);
-
-        let shell = Self::determine_shell_to_use(&vars_and_job);
-        let home = Self::determine_home_to_use(&vars_and_job)?;
-        let command = Self::variables_and_job_to_shell_command(&vars_and_job);
-
-        Ok((shell, home, command))
     }
 
     fn ensure_job_exists(&self, job: &CronJob) -> Result<(), String> {
@@ -225,43 +224,34 @@ impl Crontab {
         Ok(())
     }
 
-    fn extract_variables_and_target_job(&self, target_job: &CronJob) -> Vec<&Token> {
-        let mut out: Vec<&Token> = Vec::new();
+    fn extract_variables(&self, target_job: &CronJob) -> HashMap<String, String> {
+        let mut variables: HashMap<String, String> = HashMap::new();
         for token in &self.tokens {
-            if let Token::Variable(_) = token {
-                out.push(token);
+            if let Token::Variable(variable) = token {
+                variables.insert(variable.identifier.clone(), variable.value.clone());
             } else if let Token::CronJob(job) = token {
                 if job == target_job {
-                    out.push(token);
                     break; // Variables coming after the job are not used.
                 }
             }
         }
-        out
+        variables
     }
 
-    fn determine_shell_to_use(tokens: &Vec<&Token>) -> String {
-        let mut shell = String::from(DEFAULT_SHELL);
-        for token in tokens {
-            if let Token::Variable(variable) = token {
-                if variable.identifier == "SHELL" {
-                    shell = String::from(&variable.value);
-                }
-            }
+    fn determine_shell_to_use(env: &mut HashMap<String, String>) -> String {
+        if let Some(shell) = env.remove("SHELL") {
+            shell
+        } else {
+            String::from(DEFAULT_SHELL)
         }
-        shell
     }
 
-    fn determine_home_to_use(tokens: &Vec<&Token>) -> Result<String, String> {
-        let mut home = Self::get_home_directory()?;
-        for token in tokens {
-            if let Token::Variable(variable) = token {
-                if variable.identifier == "HOME" {
-                    home = String::from(&variable.value);
-                }
-            }
+    fn determine_home_to_use(env: &mut HashMap<String, String>) -> Result<String, String> {
+        if let Some(home) = env.remove("HOME") {
+            Ok(home)
+        } else {
+            Ok(Self::get_home_directory()?)
         }
-        Ok(home)
     }
 
     fn get_home_directory() -> Result<String, String> {
@@ -272,22 +262,6 @@ impl Crontab {
                 "Could not read Home directory from environment.",
             ))
         }
-    }
-
-    fn variables_and_job_to_shell_command(tokens: &Vec<&Token>) -> String {
-        let mut command: Vec<String> = Vec::new();
-        for token in tokens {
-            if let Token::Variable(variable) = token {
-                command.push(String::from(&variable.statement()));
-            } else if let Token::CronJob(job) = token {
-                command.push(String::from(&job.command));
-            }
-        }
-        // TODO: This is wrong, because crontab variables are handled
-        //  differently than in the shell. Contrary to the shell,
-        //  crontab doesn't do substitutions, allows quoted names, and
-        //  an unquoted '#' in the value has no meaning (not a comment).
-        command.join(";")
     }
 }
 
@@ -553,7 +527,11 @@ mod tests {
 
         // If 'FOO=bar' is not included, it means the first of the twin
         // jobs was used instead of the second that we selected.
-        assert_eq!(command.command, "FOO=bar;df -h > ~/track_disk_usage.txt");
+        assert_eq!(
+            command.env,
+            HashMap::from([(String::from("FOO"), String::from("bar"))])
+        );
+        assert_eq!(command.command, "df -h > ~/track_disk_usage.txt");
     }
 
     #[test]
@@ -587,7 +565,11 @@ mod tests {
             .make_shell_command(job)
             .expect("job exists in fixture");
 
-        assert_eq!(command.command, "FOO=bar;echo $FOO");
+        assert_eq!(
+            command.env,
+            HashMap::from([(String::from("FOO"), String::from("bar"))])
+        );
+        assert_eq!(command.command, "echo $FOO");
     }
 
     #[test]
@@ -599,7 +581,42 @@ mod tests {
             .make_shell_command(job)
             .expect("job exists in fixture");
 
-        assert_eq!(command.command, "FOO=bar;:");
+        assert_eq!(
+            command.env,
+            HashMap::from([(String::from("FOO"), String::from("bar"))])
+        );
+        assert_eq!(command.command, ":");
+    }
+
+    #[test]
+    fn double_variable_change() {
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar"),
+            }),
+            Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("baz"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("30 9 * * * "),
+                command: String::from("echo 'gm'"),
+                description: String::new(),
+            }),
+        ]);
+
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
+        let command = crontab
+            .make_shell_command(job)
+            .expect("job exists in fixture");
+
+        assert_eq!(
+            command.env,
+            HashMap::from([(String::from("FOO"), String::from("baz"))])
+        );
+        assert_eq!(command.command, "echo 'gm'");
     }
 
     #[test]
@@ -624,11 +641,36 @@ mod tests {
             .make_shell_command(job)
             .expect("job exists in fixture");
 
-        assert_eq!(command.shell, "/bin/bash");
         assert_eq!(
-            command.command,
-            "FOO=bar;SHELL=/bin/bash;echo 'I am echoed by bash!'"
+            command.env,
+            HashMap::from([(String::from("FOO"), String::from("bar"))])
         );
+        assert_eq!(command.shell, "/bin/bash");
+        assert_eq!(command.command, "echo 'I am echoed by bash!'");
+    }
+
+    #[test]
+    fn shell_variable_is_removed_from_env() {
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("SHELL"),
+                value: String::from("/bin/<custom>"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'I am echoed by a custom shell!'"),
+                description: String::new(),
+            }),
+        ]);
+
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
+        let command = crontab
+            .make_shell_command(job)
+            .expect("job exists in fixture");
+
+        assert!(!command.env.contains_key("SHELL"));
+        assert_eq!(command.shell, "/bin/<custom>");
     }
 
     #[test]
@@ -662,10 +704,7 @@ mod tests {
             .expect("job exists in fixture");
 
         assert_eq!(command.shell, "/bin/zsh");
-        assert_eq!(
-            command.command,
-            "SHELL=/bin/bash;SHELL=/bin/zsh;echo 'I am echoed by zsh!'"
-        );
+        assert_eq!(command.command, "echo 'I am echoed by zsh!'");
     }
 
     #[test]
@@ -693,11 +732,12 @@ mod tests {
             .make_shell_command(job)
             .expect("job exists in fixture");
 
-        assert_eq!(command.home, "/home/<custom>");
         assert_eq!(
-            command.command,
-            "FOO=bar;SHELL=/bin/bash;HOME=/home/<custom>;./cleanup.sh"
+            command.env,
+            HashMap::from([(String::from("FOO"), String::from("bar"))])
         );
+        assert_eq!(command.home, "/home/<custom>");
+        assert_eq!(command.command, "./cleanup.sh");
     }
 
     #[test]
@@ -715,6 +755,30 @@ mod tests {
 
         // If we don't re-create it, other tests will fail.
         env::set_var("HOME", "/home/<test>");
+    }
+
+    #[test]
+    fn home_variable_is_removed_from_env() {
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("HOME"),
+                value: String::from("/home/<custom>"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'I am echoed in a different Home!'"),
+                description: String::new(),
+            }),
+        ]);
+
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
+        let command = crontab
+            .make_shell_command(job)
+            .expect("job exists in fixture");
+
+        assert!(!command.env.contains_key("HOME"));
+        assert_eq!(command.home, "/home/<custom>");
     }
 
     #[test]
@@ -748,10 +812,7 @@ mod tests {
             .expect("job exists in fixture");
 
         assert_eq!(command.home, "/home/user2");
-        assert_eq!(
-            command.command,
-            "HOME=/home/user1;HOME=/home/user2;echo 'I run is user2's Home!'"
-        );
+        assert_eq!(command.command, "echo 'I run is user2's Home!'");
     }
 
     #[test]

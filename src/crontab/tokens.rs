@@ -40,13 +40,6 @@ pub struct Variable {
     pub value: String,
 }
 
-impl Variable {
-    #[must_use]
-    pub fn statement(&self) -> String {
-        format!("{}={}", self.identifier, self.value)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Comment {
     pub value: String,
@@ -95,15 +88,5 @@ mod tests {
         let job_display = cronjob.to_string();
 
         assert_eq!(job_display, "@hourly sleep 3599");
-    }
-
-    #[test]
-    fn variable_statement() {
-        let variable = Variable {
-            identifier: String::from("FOO"),
-            value: String::from("bar"),
-        };
-
-        assert_eq!(variable.statement(), "FOO=bar");
     }
 }
