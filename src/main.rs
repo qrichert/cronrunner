@@ -44,16 +44,16 @@ fn main() -> ExitCode {
     print_job_selection_menu(&crontab.jobs());
 
     let job_selected = match get_user_selection() {
-        Err(()) => {
-            // Bad input.
-            return exit_from_invalid_job_selection().into();
-        }
-        Ok(None) => {
-            // No input.
-            return ExitCode::SUCCESS;
-        }
+        Err(()) => return exit_from_invalid_job_selection().into(),
+        Ok(None) => return ExitCode::SUCCESS,
         Ok(Some(job_selected)) => job_selected,
     };
+
+    if job_selected == 42 && crontab.jobs().len() < 42 {
+        println!("What was the question again?");
+        return ExitCode::SUCCESS;
+    }
+
     let Some(job) = crontab.get_job_from_uid(job_selected) else {
         return exit_from_invalid_job_selection().into();
     };
