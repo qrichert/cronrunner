@@ -14,17 +14,25 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+mod args;
 mod crontab;
 mod ui;
 
+use crate::args::handle_cli_arguments;
 use crate::crontab::{CronJob, ReadError, ReadErrorDetail, RunResult, RunResultDetail};
 use crate::ui::{color_attenuate, color_error, color_highlight};
-use std::io::Write;
 
+use std::env;
+use std::io::Write;
 use std::process::ExitCode;
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> ExitCode {
+    let args: Vec<String> = env::args().collect();
+    if let Some(exit_code) = handle_cli_arguments(&args) {
+        return exit_code.into();
+    }
+
     let crontab = match crontab::make_instance() {
         Ok(crontab) => crontab,
         Err(error) => return exit_from_crontab_read_error(error).into(),
@@ -121,7 +129,7 @@ fn get_user_selection() -> Result<Option<u32>, ()> {
     print!(">>> Select a job to run: ");
     // Flush manually in case `stdout` is line-buffered (common case),
     // else the previous print won't be displayed immediately (no `\n`).
-    std::io::stdout().flush().unwrap();
+    std::io::stdout().flush().unwrap_or_default();
 
     let mut job_selected = String::new();
     std::io::stdin()
