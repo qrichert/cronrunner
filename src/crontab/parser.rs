@@ -15,6 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 use super::tokens::{Comment, CronJob, Token, Unknown, Variable};
+use std::str::Chars;
 
 /// Parse `crontab` into usable tokens.
 ///
@@ -57,7 +58,7 @@ impl Parser {
     #[must_use]
     pub fn parse(crontab: &str) -> Vec<Token> {
         let mut tokens = Vec::new();
-        let mut job_uid: u32 = 0;
+        let mut job_uid: u32 = 1;
 
         for mut line in crontab.lines() {
             line = line.trim();
@@ -65,8 +66,12 @@ impl Parser {
                 continue;
             }
             if Self::is_job(line) {
-                job_uid += 1;
-                tokens.push(Self::make_job_token(line, tokens.last(), job_uid));
+                if let Ok(job_token) = Self::make_job_token(line, tokens.last(), job_uid) {
+                    job_uid += 1;
+                    tokens.push(job_token);
+                } else {
+                    tokens.push(Self::make_unknown_token(line));
+                }
             } else if Self::is_variable(line) {
                 tokens.push(Self::make_variable_token(line));
             } else if Self::is_comment(line) {
@@ -85,15 +90,25 @@ impl Parser {
         "0123456789*@".contains(first_char)
     }
 
-    fn make_job_token(line: &str, previous_token: Option<&Token>, job_uid: u32) -> Token {
+    fn make_job_token(
+        line: &str,
+        previous_token: Option<&Token>,
+        job_uid: u32,
+    ) -> Result<Token, ()> {
         let (schedule, command) = Self::split_schedule_and_command(line);
+
+        if schedule.is_empty() || command.is_empty() {
+            return Err(());
+        }
+
         let description = Self::get_job_description(previous_token);
-        Token::CronJob(CronJob {
+
+        Ok(Token::CronJob(CronJob {
             uid: job_uid,
             schedule,
             command,
             description: String::from(description),
-        })
+        }))
     }
 
     /// Split schedule and command parts of a job line.
@@ -106,25 +121,62 @@ impl Parser {
     /// schedule is consumed), it considers the rest to be the command
     /// itself.
     fn split_schedule_and_command(line: &str) -> (String, String) {
-        let schedule_length = if line.starts_with('@') { 1 } else { 5 };
-        let mut schedule = Vec::new();
-        let mut command = Vec::new();
-        let mut i = 0;
-        for element in line.split(' ') {
-            if i < schedule_length {
-                // Schedule.
-                schedule.push(element);
-                if !element.is_empty() {
-                    i += 1;
+        let mut chars = line.chars();
+
+        // Extract schedule.
+        let schedule = Self::extract_schedule_from_job_chars(&mut chars);
+
+        // The rest is the command.
+        let command = String::from(chars.as_str().trim());
+
+        (schedule, command)
+    }
+
+    /// Do the schedule extraction...
+    ///
+    /// ...literally. `chars` are passed as a reference to an interator
+    /// that belongs to [`split_schedule_and_command()`]. This iterator
+    /// is consumed as we extract schedule elements. Once we're done,
+    /// the iterator is left with only the command part.
+    ///
+    /// First, we determine how many elements we're expecting (one or
+    /// five, depending on whether the first character is '@' or not).
+    ///
+    /// Then, we consume the characters, and every time we encounter
+    /// whitespace (i.e., we go from _something_ to _whitespace_), we
+    /// count one element.
+    fn extract_schedule_from_job_chars(chars: &mut Chars) -> String {
+        let first_char = chars
+            .next()
+            .expect("if line is empty, we shouldn't be parsing a schedule in the first place");
+
+        let mut schedule = String::from(first_char);
+
+        let target_schedule_length = if first_char == '@' { 1 } else { 5 };
+
+        let mut nb_elements = 0;
+        let mut previous_char = first_char;
+        loop {
+            let Some(char) = chars.next() else {
+                // Early exit, should not happen if schedule is valid.
+                return schedule;
+            };
+
+            if char.is_ascii_whitespace() {
+                // From _something_ to _whitespace_.
+                if !previous_char.is_ascii_whitespace() {
+                    nb_elements += 1;
+                    if nb_elements == target_schedule_length {
+                        return schedule;
+                    }
+                    schedule.push(' ');
                 }
             } else {
-                // Command.
-                command.push(element);
+                schedule.push(char);
             }
+
+            previous_char = char;
         }
-        let schedule = schedule.join(" ");
-        let command = command.join(" ");
-        (schedule, command)
     }
 
     fn get_job_description(previous_token: Option<&Token>) -> &str {
@@ -326,6 +378,78 @@ mod tests {
     }
 
     #[test]
+    fn shortcuts_are_parsed_as_full_job_schedule() {
+        let tokens = Parser::parse(" \t@shortcut\techo 'foo'");
+
+        let Token::CronJob(CronJob { ref schedule, .. }) = tokens[0] else {
+            panic!("first (and only) token should be a job")
+        };
+
+        assert_eq!(schedule, "@shortcut");
+    }
+
+    #[test]
+    fn complex_job_schedules_are_parsed_correctly() {
+        let tokens = Parser::parse(" \t*/15 3-6,9-12 * * *\techo 'foo'");
+
+        let Token::CronJob(CronJob { ref schedule, .. }) = tokens[0] else {
+            panic!("first (and only) token should be a job")
+        };
+
+        assert_eq!(schedule, "*/15 3-6,9-12 * * *");
+    }
+
+    #[test]
+    fn whitespace_is_cleared_around_job_schedule_and_normalized_within() {
+        let tokens = Parser::parse(" \t  * \t 3-6,9-12 \t * \t * \t *   \t  echo  \t 'foo'  \t ");
+
+        let Token::CronJob(CronJob { ref schedule, .. }) = tokens[0] else {
+            panic!("first (and only) token should be a job")
+        };
+
+        assert_eq!(schedule, "* 3-6,9-12 * * *");
+    }
+
+    #[test]
+    fn whitespace_is_cleared_around_job_command_but_preserved_within() {
+        let tokens = Parser::parse(" \t  * \t * \t * \t * \t *   \t  echo  'foo \t\t\\n bar'  \t ");
+
+        let Token::CronJob(CronJob { ref command, .. }) = tokens[0] else {
+            panic!("first (and only) token should be a job")
+        };
+
+        assert_eq!(command, "echo  'foo \t\t\\n bar'");
+    }
+
+    #[test]
+    fn tabs_are_treated_as_valid_job_delimiters() {
+        let tokens = Parser::parse("\t*\t*\t\t*\t*\t*\t\techo\t\t'foo'\t\t");
+
+        let Token::CronJob(CronJob {
+            ref schedule,
+            ref command,
+            ..
+        }) = tokens[0]
+        else {
+            panic!("first (and only) token should be a job")
+        };
+
+        assert_eq!(schedule, "* * * * *");
+        assert_eq!(command, "echo\t\t'foo'");
+    }
+
+    #[test]
+    fn parsing_does_not_fail_on_incomplete_schedule() {
+        let tokens = Parser::parse("  * * *  ");
+
+        let Token::Unknown(Unknown { ref value }) = tokens[0] else {
+            panic!("first (and only) token should be unknown")
+        };
+
+        assert_eq!(value, "* * *");
+    }
+
+    #[test]
     fn description_detection_does_not_fail_if_nothing_precedes_job() {
         let tokens = Parser::parse("* * * * * printf 'hello, world'");
 
@@ -341,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn unknown_job_shortcut() {
+    fn unknown_token() {
         let tokens = Parser::parse("# The following line is unknown:\nunknown :");
 
         assert_eq!(
@@ -535,21 +659,6 @@ mod tests {
             vec![Token::Variable(Variable {
                 identifier: String::from("FOO"),
                 value: String::from("bar # baz")
-            })],
-        );
-    }
-
-    #[test]
-    fn extra_whitespace_in_schedule_is_ignored() {
-        let tokens = Parser::parse("*   *    *   *   * printf 'hello, world'");
-
-        assert_eq!(
-            tokens,
-            vec![Token::CronJob(CronJob {
-                uid: 1,
-                schedule: String::from("*   *    *   *   *"),
-                command: String::from("printf 'hello, world'"),
-                description: String::new()
             })],
         );
     }

@@ -160,7 +160,7 @@ fn make_instance_success() {
             Token::CronJob(CronJob {
                 uid: 1,
                 schedule: String::from("5 0 * * *"),
-                command: String::from("      $HOME/bin/daily.job >> $HOME/tmp/out 2>&1"),
+                command: String::from("$HOME/bin/daily.job >> $HOME/tmp/out 2>&1"),
                 description: String::new()
             }),
             Token::Comment(Comment {
@@ -171,7 +171,7 @@ fn make_instance_success() {
             Token::CronJob(CronJob {
                 uid: 2,
                 schedule: String::from("15 14 1 * *"),
-                command: String::from("    $HOME/bin/monthly"),
+                command: String::from("$HOME/bin/monthly"),
                 description: String::new()
             }),
             Token::Comment(Comment {
@@ -180,7 +180,7 @@ fn make_instance_success() {
             Token::CronJob(CronJob {
                 uid: 3,
                 schedule: String::from("0 22 * * 1-5"),
-                command: String::from("   mail -s \"It's 10pm\" joe%Joe,%%Where are your kids?%"),
+                command: String::from("mail -s \"It's 10pm\" joe%Joe,%%Where are your kids?%"),
                 description: String::new()
             }),
             Token::CronJob(CronJob {
@@ -192,7 +192,7 @@ fn make_instance_success() {
             Token::CronJob(CronJob {
                 uid: 5,
                 schedule: String::from("5 4 * * sun"),
-                command: String::from("    echo \"run at 5 after 4 every sunday\""),
+                command: String::from("echo \"run at 5 after 4 every sunday\""),
                 description: String::new()
             })
         ]
