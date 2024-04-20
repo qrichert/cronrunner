@@ -29,6 +29,11 @@ pub fn color_attenuate(string: &str) -> String {
     format!("\x1b[0;90m{string}\x1b[0m")
 }
 
+#[must_use]
+pub fn color_title(string: &str) -> String {
+    format!("\x1b[97;1;4m{string}\x1b[0")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -54,6 +59,14 @@ mod tests {
         assert_eq!(
             color_attenuate("this is attenuated"),
             "\x1b[0;90mthis is attenuated\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn color_title_is_white_bold_underlined() {
+        assert_eq!(
+            color_title("this is white, bold, and underlined"),
+            "\x1b[97;1;4mthis is white, bold, and underlined\x1b[0"
         );
     }
 }

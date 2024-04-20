@@ -20,7 +20,7 @@ mod ui;
 
 use crate::args::handle_cli_arguments;
 use crate::crontab::{CronJob, ReadError, ReadErrorDetail, RunResult, RunResultDetail};
-use crate::ui::{color_attenuate, color_error, color_highlight};
+use crate::ui::{color_attenuate, color_error, color_highlight, color_title};
 
 use std::env;
 use std::io::Write;
@@ -99,28 +99,42 @@ fn print_job_selection_menu(jobs: &Vec<&CronJob>) {
 fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
     let mut menu = Vec::new();
 
-    let max_width = determine_max_uid_width(jobs);
+    let mut last_section = &None;
+    let max_uid_width = determine_max_uid_width(jobs);
+
     for &job in jobs {
-        let padding = determine_uid_padding(job.uid, max_width);
+        if &job.section != last_section && job.section.is_some() {
+            last_section = &job.section;
+            menu.push(format!(
+                "\n{}\n",
+                color_title(job.section.as_ref().unwrap())
+            ));
+        }
+
+        let padding = determine_uid_padding(job.uid, max_uid_width);
         let number = color_highlight(&format!("{padding}{}.", job.uid));
 
-        let job_has_description = job.description.is_empty();
-
-        let description = if job_has_description {
-            String::new()
+        let description = if let Some(description) = &job.description {
+            format!("{description} ")
         } else {
-            format!("{} ", job.description)
+            String::new()
         };
 
         let schedule = color_attenuate(&job.schedule);
 
-        let command = if job_has_description {
+        let command = if description.is_empty() {
             String::from(&job.command)
         } else {
             color_attenuate(&job.command)
         };
 
         menu.push(format!("{number} {description}{schedule} {command}"));
+    }
+
+    // It looks weird having spacing around section titles,
+    // but not after the last job line.
+    if last_section.is_some() {
+        menu.push(String::new());
     }
 
     menu
@@ -283,13 +297,15 @@ mod tests {
                 uid: 1,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
-                description: String::new(),
+                description: None,
+                section: None,
             },
             CronJob {
                 uid: 2,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'buongiorno'"),
-                description: String::from("This job has a description"),
+                description: Some(String::from("This job has a description")),
+                section: None,
             },
         ];
 
@@ -305,25 +321,68 @@ mod tests {
     }
 
     #[test]
+    fn format_menu_sections() {
+        let tokens = [
+            CronJob {
+                uid: 1,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'foo'"),
+                description: None,
+                section: None,
+            },
+            CronJob {
+                uid: 2,
+                schedule: String::from("@monthly"),
+                command: String::from("echo 'bar'"),
+                description: None,
+                section: Some(String::from("These jobs have a section")),
+            },
+            CronJob {
+                uid: 3,
+                schedule: String::from("@monthly"),
+                command: String::from("echo 'baz'"),
+                description: None,
+                section: Some(String::from("These jobs have a section")),
+            },
+        ];
+
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect());
+
+        assert_eq!(
+            entries,
+            vec![
+                String::from("\u{1b}[0;92m1.\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'foo'"),
+                String::from("\n\u{1b}[97;1;4mThese jobs have a section\u{1b}[0\n"),
+                String::from("\u{1b}[0;92m2.\u{1b}[0m \u{1b}[0;90m@monthly\u{1b}[0m echo 'bar'"),
+                String::from("\u{1b}[0;92m3.\u{1b}[0m \u{1b}[0;90m@monthly\u{1b}[0m echo 'baz'"),
+                String::new(),
+            ]
+        );
+    }
+
+    #[test]
     fn job_uid_alignment() {
         let tokens = [
             CronJob {
                 uid: 1,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
-                description: String::new(),
+                description: None,
+                section: None,
             },
             CronJob {
                 uid: 108,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
-                description: String::new(),
+                description: None,
+                section: None,
             },
             CronJob {
                 uid: 12,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
-                description: String::new(),
+                description: None,
+                section: None,
             },
         ];
 
@@ -340,7 +399,8 @@ mod tests {
             uid: 42,
             schedule: String::from("@hourly"),
             command: String::from("echo '¡hola!'"),
-            description: String::new(),
+            description: None,
+            section: None,
         }];
 
         let entries = format_jobs_as_menu_entries(&tokens.iter().collect());

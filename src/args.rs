@@ -57,6 +57,21 @@ Extras:
   This job will be presented like this:
 
       1. Say hello. @hourly echo \"hello\"
+
+  Comments that start with three hashes (###) are used as section
+  headers, up until a new section starts or up until the end.
+
+      ### Housekeeping
+
+      @daily docker image prune --force
+
+  This job will be presented like this:
+
+      Housekeeping
+
+      1. @daily docker image prune --force
+
+  Descriptions and sections are independent from one another.
       "
             .trim(),
         ),

@@ -21,15 +21,17 @@ pub struct CronJob {
     pub uid: u32,
     pub schedule: String,
     pub command: String,
-    pub description: String,
+    // TODO(refactor): Put these in a `metadata` struct.
+    pub description: Option<String>,
+    pub section: Option<String>,
 }
 
 impl fmt::Display for CronJob {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.description.is_empty() {
-            write!(f, "{} {}", self.schedule, self.command)
+        if let Some(description) = &self.description {
+            write!(f, "{description}")
         } else {
-            write!(f, "{}", self.description)
+            write!(f, "{} {}", self.schedule, self.command)
         }
     }
 }
@@ -41,8 +43,16 @@ pub struct Variable {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CommentKind {
+    Regular,
+    Description,
+    Section,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Comment {
     pub value: String,
+    pub kind: CommentKind,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,7 +78,8 @@ mod tests {
             uid: 1,
             schedule: String::from("@hourly"),
             command: String::from("sleep 3599"),
-            description: String::from("Sleep (almost) forever."),
+            description: Some(String::from("Sleep (almost) forever.")),
+            section: None,
         };
 
         let job_display = cronjob.to_string();
@@ -82,7 +93,8 @@ mod tests {
             uid: 1,
             schedule: String::from("@hourly"),
             command: String::from("sleep 3599"),
-            description: String::new(),
+            description: None,
+            section: None,
         };
 
         let job_display = cronjob.to_string();

@@ -1,7 +1,7 @@
 mod utils;
 
 use crate::utils::{mock_crontab, mock_shell, read_output_file};
-use cronrunner::crontab::tokens::{Comment, CronJob, Token, Variable};
+use cronrunner::crontab::tokens::{Comment, CommentKind, CronJob, Token, Variable};
 use cronrunner::crontab::{make_instance, ReadError, ReadErrorDetail, Reader, RunResultDetail};
 use std::env;
 
@@ -62,7 +62,8 @@ fn run_job_error_other_reason() {
         uid: 42,
         schedule: String::from("@never"),
         command: String::from("sleep infinity"),
-        description: String::new(),
+        description: None,
+        section: None,
     };
 
     // We could trigger any error here, besides obviously a problem with
@@ -137,63 +138,74 @@ fn make_instance_success() {
         vec![
             Token::Comment(Comment {
                 value: String::from(
-                    "# use /bin/sh to run commands, overriding the default set by cron"
-                )
+                    "use /bin/sh to run commands, overriding the default set by cron"
+                ),
+                kind: CommentKind::Regular,
             }),
             Token::Variable(Variable {
                 identifier: String::from("SHELL"),
                 value: String::from("/bin/sh")
             }),
             Token::Comment(Comment {
-                value: String::from("# mail any output to `paul', no matter whose crontab this is")
+                value: String::from("mail any output to `paul', no matter whose crontab this is"),
+                kind: CommentKind::Regular,
             }),
             Token::Variable(Variable {
                 identifier: String::from("MAILTO"),
                 value: String::from("paul")
             }),
             Token::Comment(Comment {
-                value: String::from("#")
+                value: String::new(),
+                kind: CommentKind::Regular,
             }),
             Token::Comment(Comment {
-                value: String::from("# run five minutes after midnight, every day")
+                value: String::from("run five minutes after midnight, every day"),
+                kind: CommentKind::Regular,
             }),
             Token::CronJob(CronJob {
                 uid: 1,
                 schedule: String::from("5 0 * * *"),
                 command: String::from("$HOME/bin/daily.job >> $HOME/tmp/out 2>&1"),
-                description: String::new()
+                description: None,
+                section: None,
             }),
             Token::Comment(Comment {
                 value: String::from(
-                    "# run at 2:15pm on the first of every month -- output mailed to paul"
-                )
+                    "run at 2:15pm on the first of every month -- output mailed to paul"
+                ),
+                kind: CommentKind::Regular,
             }),
             Token::CronJob(CronJob {
                 uid: 2,
                 schedule: String::from("15 14 1 * *"),
                 command: String::from("$HOME/bin/monthly"),
-                description: String::new()
+                description: None,
+                section: None,
             }),
             Token::Comment(Comment {
-                value: String::from("# run at 10 pm on weekdays, annoy Joe")
+                value: String::from("run at 10 pm on weekdays, annoy Joe"),
+                kind: CommentKind::Regular,
             }),
             Token::CronJob(CronJob {
                 uid: 3,
                 schedule: String::from("0 22 * * 1-5"),
                 command: String::from("mail -s \"It's 10pm\" joe%Joe,%%Where are your kids?%"),
-                description: String::new()
+                description: None,
+                section: None,
             }),
             Token::CronJob(CronJob {
                 uid: 4,
                 schedule: String::from("23 0-23/2 * * *"),
                 command: String::from("echo \"run 23 minutes after midn, 2am, 4am ..., everyday\""),
-                description: String::new()
+                description: None,
+                section: None,
             }),
             Token::CronJob(CronJob {
                 uid: 5,
                 schedule: String::from("5 4 * * sun"),
                 command: String::from("echo \"run at 5 after 4 every sunday\""),
-                description: String::new()
+                description: None,
+                section: None,
             })
         ]
     );

@@ -131,7 +131,8 @@ impl Crontab {
     /// #     uid: 1,
     /// #     schedule: String::new(),
     /// #     command: String::new(),
-    /// #     description: String::new(),
+    /// #     description: None,
+    /// #     section: None,
     /// # })]);
     /// #
     /// let job: &CronJob = crontab.get_job_from_uid(1).expect("pretend it exists");
@@ -289,43 +290,52 @@ pub fn make_instance() -> Result<Crontab, ReadError> {
 
 #[cfg(test)]
 mod tests {
-    use super::tokens::{Comment, Variable};
+    use super::tokens::{Comment, CommentKind, Variable};
     use super::*;
 
     // Warning: These tests MUST be run sequentially. Running them in
     // parallel threads may cause conflicts with environment variables,
     // as a variable may be overridden before it is used.
 
+    // TODO(refactor): Tests should be independent, and not use a common
+    //  fixture that will break unrelated tests when updated.
     fn tokens() -> Vec<Token> {
         vec![
             Token::Comment(Comment {
                 value: String::from("# CronRunner Demo"),
+                kind: CommentKind::Regular,
             }),
             Token::Comment(Comment {
                 value: String::from("# ---------------"),
+                kind: CommentKind::Regular,
             }),
             Token::CronJob(CronJob {
                 uid: 1,
                 schedule: String::from("@reboot"),
                 command: String::from("/usr/bin/bash ~/startup.sh"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
             Token::Comment(Comment {
                 value: String::from(
                     "# Double-hash comments (##) immediately preceding a job are used as",
                 ),
+                kind: CommentKind::Regular,
             }),
             Token::Comment(Comment {
                 value: String::from("# description. See below:"),
+                kind: CommentKind::Regular,
             }),
             Token::Comment(Comment {
                 value: String::from("## Update brew."),
+                kind: CommentKind::Description,
             }),
             Token::CronJob(CronJob {
                 uid: 2,
                 schedule: String::from("30 20 * * *"),
                 command: String::from("/usr/local/bin/brew update && /usr/local/bin/brew upgrade"),
-                description: String::from("Update brew."),
+                description: Some(String::from("Update brew.")),
+                section: None,
             }),
             Token::Variable(Variable {
                 identifier: String::from("FOO"),
@@ -333,21 +343,25 @@ mod tests {
             }),
             Token::Comment(Comment {
                 value: String::from("## Print variable."),
+                kind: CommentKind::Description,
             }),
             Token::CronJob(CronJob {
                 uid: 3,
                 schedule: String::from("* * * * *"),
                 command: String::from("echo $FOO"),
-                description: String::from("Print variable."),
+                description: Some(String::from("Print variable.")),
+                section: None,
             }),
             Token::Comment(Comment {
                 value: String::from("# Do nothing (this is a regular comment)."),
+                kind: CommentKind::Regular,
             }),
             Token::CronJob(CronJob {
                 uid: 4,
                 schedule: String::from("@reboot"),
                 command: String::from(":"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
             Token::Variable(Variable {
                 identifier: String::from("SHELL"),
@@ -357,7 +371,8 @@ mod tests {
                 uid: 5,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by bash!'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
             Token::Variable(Variable {
                 identifier: String::from("HOME"),
@@ -367,7 +382,8 @@ mod tests {
                 uid: 6,
                 schedule: String::from("@yerly"),
                 command: String::from("./cleanup.sh"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
         ]
     }
@@ -378,7 +394,8 @@ mod tests {
             uid: 1,
             schedule: String::from("@hourly"),
             command: String::from("echo 'hello, world'"),
-            description: String::new(),
+            description: None,
+            section: None,
         })]);
 
         assert!(crontab.has_runnable_jobs());
@@ -389,6 +406,7 @@ mod tests {
         let crontab = Crontab::new(vec![
             Token::Comment(Comment {
                 value: String::from("# This is a comment"),
+                kind: CommentKind::Regular,
             }),
             Token::Variable(Variable {
                 identifier: String::from("SHELL"),
@@ -434,28 +452,32 @@ mod tests {
             uid: 1,
             schedule: String::from("@reboot"),
             command: String::from("/usr/bin/bash ~/startup.sh"),
-            description: String::new(),
+            description: None,
+            section: None,
         }),);
         // Valid job, invalid UID.
         assert!(!crontab.has_job(&CronJob {
             uid: 0,
             schedule: String::from("@reboot"),
             command: String::from("/usr/bin/bash ~/startup.sh"),
-            description: String::new(),
+            description: None,
+            section: None,
         }),);
         // Valid job, different job's UID.
         assert!(!crontab.has_job(&CronJob {
             uid: 0,
             schedule: String::from("@reboot"),
             command: String::from("/usr/bin/bash ~/startup.sh"),
-            description: String::new(),
+            description: None,
+            section: None,
         }),);
         // Invalid job, same UID.
         assert!(!crontab.has_job(&CronJob {
             uid: 1,
             schedule: String::from("<invalid>"),
             command: String::from("<invalid>"),
-            description: String::new(),
+            description: None,
+            section: None,
         }),);
     }
 
@@ -465,7 +487,8 @@ mod tests {
             uid: 1,
             schedule: String::from("@reboot"),
             command: String::from("echo 'hello, world'"),
-            description: String::new(),
+            description: None,
+            section: None,
         })]);
 
         let job = crontab.get_job_from_uid(1).expect("job exists");
@@ -476,7 +499,8 @@ mod tests {
                 uid: 1,
                 schedule: String::from("@reboot"),
                 command: String::from("echo 'hello, world'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }
         );
     }
@@ -487,7 +511,8 @@ mod tests {
             uid: 1,
             schedule: String::from("@daily"),
             command: String::from("echo 'hello, world'"),
-            description: String::new(),
+            description: None,
+            section: None,
         })]);
 
         let job = crontab.get_job_from_uid(42);
@@ -502,7 +527,8 @@ mod tests {
                 uid: 1,
                 schedule: String::from("@daily"),
                 command: String::from("df -h > ~/track_disk_usage.txt"),
-                description: String::from("Track disk usage."),
+                description: Some(String::from("Track disk usage.")),
+                section: None,
             }),
             Token::Variable(Variable {
                 identifier: String::from("FOO"),
@@ -512,7 +538,8 @@ mod tests {
                 uid: 2,
                 schedule: String::from("@daily"),
                 command: String::from("df -h > ~/track_disk_usage.txt"),
-                description: String::from("Track disk usage."),
+                description: Some(String::from("Track disk usage.")),
+                section: None,
             }),
         ]);
 
@@ -599,7 +626,8 @@ mod tests {
                 uid: 1,
                 schedule: String::from("30 9 * * * "),
                 command: String::from("echo 'gm'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
         ]);
 
@@ -656,7 +684,8 @@ mod tests {
                 uid: 1,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by a custom shell!'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
         ]);
 
@@ -680,7 +709,8 @@ mod tests {
                 uid: 1,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by bash!'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
             Token::Variable(Variable {
                 identifier: String::from("SHELL"),
@@ -690,7 +720,8 @@ mod tests {
                 uid: 2,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by zsh!'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
         ]);
 
@@ -764,7 +795,8 @@ mod tests {
                 uid: 1,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed in a different Home!'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
         ]);
 
@@ -788,7 +820,8 @@ mod tests {
                 uid: 1,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I run is user1's Home!'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
             Token::Variable(Variable {
                 identifier: String::from("HOME"),
@@ -798,7 +831,8 @@ mod tests {
                 uid: 2,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I run is user2's Home!'"),
-                description: String::new(),
+                description: None,
+                section: None,
             }),
         ]);
 
@@ -817,13 +851,15 @@ mod tests {
             uid: 1,
             schedule: String::from("@hourly"),
             command: String::from("echo 'I am echoed by bash!'"),
-            description: String::new(),
+            description: None,
+            section: None,
         })]);
         let job_not_in_crontab = CronJob {
             uid: 42,
             schedule: String::from("@never"),
             command: String::from("sleep infinity"),
-            description: String::new(),
+            description: None,
+            section: None,
         };
 
         let error = crontab
