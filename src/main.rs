@@ -99,8 +99,10 @@ fn print_job_selection_menu(jobs: &Vec<&CronJob>) {
 fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
     let mut menu = Vec::new();
 
+    let max_width = determine_max_uid_width(jobs);
     for &job in jobs {
-        let job_number = color_highlight(&format!("{}.", job.uid));
+        let padding = determine_uid_padding(job.uid, max_width);
+        let number = color_highlight(&format!("{padding}{}.", job.uid));
 
         let job_has_description = job.description.is_empty();
 
@@ -118,10 +120,21 @@ fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
             color_attenuate(&job.command)
         };
 
-        menu.push(format!("{job_number} {description}{schedule} {command}"));
+        menu.push(format!("{number} {description}{schedule} {command}"));
     }
 
     menu
+}
+
+fn determine_max_uid_width(jobs: &[&CronJob]) -> usize {
+    let max_uid = jobs.iter().map(|job| job.uid).max().unwrap_or(0);
+    max_uid.to_string().len()
+}
+
+fn determine_uid_padding(job_uid: u32, width: usize) -> String {
+    let job_uid = job_uid.to_string();
+    let padding_length = width.saturating_sub(job_uid.len());
+    " ".repeat(padding_length)
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -289,6 +302,36 @@ mod tests {
                 String::from("\u{1b}[0;92m2.\u{1b}[0m This job has a description \u{1b}[0;90m@monthly\u{1b}[0m \u{1b}[0;90mecho 'buongiorno'\u{1b}[0m"),
             ]
         );
+    }
+
+    #[test]
+    fn job_uid_alignment() {
+        let tokens = [
+            CronJob {
+                uid: 1,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'hello, world'"),
+                description: String::new(),
+            },
+            CronJob {
+                uid: 108,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'hello, world'"),
+                description: String::new(),
+            },
+            CronJob {
+                uid: 12,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'hello, world'"),
+                description: String::new(),
+            },
+        ];
+
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect());
+
+        assert!(entries[0].starts_with("\u{1b}[0;92m  1.\u{1b}[0m"));
+        assert!(entries[1].starts_with("\u{1b}[0;92m108.\u{1b}[0m"));
+        assert!(entries[2].starts_with("\u{1b}[0;92m 12.\u{1b}[0m"));
     }
 
     #[test]
