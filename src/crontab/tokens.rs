@@ -21,7 +21,6 @@ pub struct CronJob {
     pub uid: u32,
     pub schedule: String,
     pub command: String,
-    // TODO(refactor): Put these in a `metadata` struct.
     pub description: Option<String>,
     pub section: Option<String>,
 }

@@ -45,7 +45,8 @@ impl Parser {
     ///         uid: 1,
     ///         schedule: String::from("@hourly"),
     ///         command: String::from("echo ':)'"),
-    ///         description: None,section: None,
+    ///         description: None,
+    ///         section: None,
     ///     })],
     /// )
     /// ```

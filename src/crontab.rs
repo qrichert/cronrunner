@@ -297,8 +297,6 @@ mod tests {
     // parallel threads may cause conflicts with environment variables,
     // as a variable may be overridden before it is used.
 
-    // TODO(refactor): Tests should be independent, and not use a common
-    //  fixture that will break unrelated tests when updated.
     fn tokens() -> Vec<Token> {
         vec![
             Token::Comment(Comment {
@@ -445,33 +443,31 @@ mod tests {
 
     #[test]
     fn has_job() {
-        let crontab = Crontab::new(tokens());
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            schedule: String::from("@daily"),
+            command: String::from("docker image prune --force"),
+            description: None,
+            section: None,
+        })]);
 
-        // Valid job, same UID.
+        // Same job, same UID.
         assert!(crontab.has_job(&CronJob {
             uid: 1,
-            schedule: String::from("@reboot"),
-            command: String::from("/usr/bin/bash ~/startup.sh"),
+            schedule: String::from("@daily"),
+            command: String::from("docker image prune --force"),
             description: None,
             section: None,
         }),);
-        // Valid job, invalid UID.
+        // Same job, different UID.
         assert!(!crontab.has_job(&CronJob {
             uid: 0,
-            schedule: String::from("@reboot"),
-            command: String::from("/usr/bin/bash ~/startup.sh"),
+            schedule: String::from("@daily"),
+            command: String::from("docker image prune --force"),
             description: None,
             section: None,
         }),);
-        // Valid job, different job's UID.
-        assert!(!crontab.has_job(&CronJob {
-            uid: 0,
-            schedule: String::from("@reboot"),
-            command: String::from("/usr/bin/bash ~/startup.sh"),
-            description: None,
-            section: None,
-        }),);
-        // Invalid job, same UID.
+        // Different job, same UID.
         assert!(!crontab.has_job(&CronJob {
             uid: 1,
             schedule: String::from("<invalid>"),
@@ -569,7 +565,13 @@ mod tests {
 
     #[test]
     fn run_cron_without_variable() {
-        let crontab = Crontab::new(tokens());
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            schedule: String::from("@reboot"),
+            command: String::from("/usr/bin/bash ~/startup.sh"),
+            description: Some(String::from("Description.")),
+            section: None,
+        })]);
 
         let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
         let command = crontab
@@ -581,9 +583,21 @@ mod tests {
 
     #[test]
     fn run_cron_with_variable() {
-        let crontab = Crontab::new(tokens());
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("* * * * *"),
+                command: String::from("echo $FOO"),
+                description: Some(String::from("Print variable.")),
+                section: None,
+            }),
+        ]);
 
-        let job = crontab.get_job_from_uid(3).expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
         let command = crontab
             .make_shell_command(job)
             .expect("job exists in fixture");
@@ -597,9 +611,36 @@ mod tests {
 
     #[test]
     fn run_cron_after_variable_but_not_right_after_it() {
-        let crontab = Crontab::new(tokens());
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("FOO"),
+                value: String::from("bar"),
+            }),
+            Token::Comment(Comment {
+                value: String::from("## Print variable."),
+                kind: CommentKind::Description,
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("* * * * *"),
+                command: String::from("echo $FOO"),
+                description: Some(String::from("Print variable.")),
+                section: None,
+            }),
+            Token::Comment(Comment {
+                value: String::from("# Do nothing (this is a regular comment)."),
+                kind: CommentKind::Regular,
+            }),
+            Token::CronJob(CronJob {
+                uid: 2,
+                schedule: String::from("@reboot"),
+                command: String::from(":"),
+                description: None,
+                section: None,
+            }),
+        ]);
 
-        let job = crontab.get_job_from_uid(4).expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(2).expect("job exists in fixture");
         let command = crontab
             .make_shell_command(job)
             .expect("job exists in fixture");
@@ -645,7 +686,13 @@ mod tests {
 
     #[test]
     fn run_cron_with_default_shell() {
-        let crontab = Crontab::new(tokens());
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            schedule: String::from("@reboot"),
+            command: String::from("cat a-file.txt"),
+            description: None,
+            section: None,
+        })]);
 
         let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
         let command = crontab
@@ -653,22 +700,31 @@ mod tests {
             .expect("job exists in fixture");
 
         assert_eq!(command.shell, DEFAULT_SHELL);
-        assert_eq!(command.command, "/usr/bin/bash ~/startup.sh");
+        assert_eq!(command.command, "cat a-file.txt");
     }
 
     #[test]
     fn run_cron_with_different_shell() {
-        let crontab = Crontab::new(tokens());
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("SHELL"),
+                value: String::from("/bin/bash"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'I am echoed by bash!'"),
+                description: None,
+                section: None,
+            }),
+        ]);
 
-        let job = crontab.get_job_from_uid(5).expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
         let command = crontab
             .make_shell_command(job)
             .expect("job exists in fixture");
 
-        assert_eq!(
-            command.env,
-            HashMap::from([(String::from("FOO"), String::from("bar"))])
-        );
+        assert_eq!(command.env, HashMap::new());
         assert_eq!(command.shell, "/bin/bash");
         assert_eq!(command.command, "echo 'I am echoed by bash!'");
     }
@@ -738,7 +794,13 @@ mod tests {
     fn run_cron_with_default_home() {
         env::set_var("HOME", "/home/<default>");
 
-        let crontab = Crontab::new(tokens());
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            schedule: String::from("@daily"),
+            command: String::from("/usr/bin/bash ~/startup.sh"),
+            description: None,
+            section: None,
+        })]);
 
         let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
         let command = crontab
@@ -752,36 +814,28 @@ mod tests {
     fn run_cron_with_different_home() {
         env::set_var("HOME", "/home/<default>");
 
-        let crontab = Crontab::new(tokens());
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("HOME"),
+                value: String::from("/home/<custom>"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("@yearly"),
+                command: String::from("./cleanup.sh"),
+                description: None,
+                section: None,
+            }),
+        ]);
 
-        let job = crontab.get_job_from_uid(6).expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
         let command = crontab
             .make_shell_command(job)
             .expect("job exists in fixture");
 
-        assert_eq!(
-            command.env,
-            HashMap::from([(String::from("FOO"), String::from("bar"))])
-        );
+        assert_eq!(command.env, HashMap::new());
         assert_eq!(command.home, "/home/<custom>");
         assert_eq!(command.command, "./cleanup.sh");
-    }
-
-    #[test]
-    fn get_home_directory_error() {
-        env::remove_var("HOME");
-
-        let crontab = Crontab::new(tokens());
-
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let error = crontab
-            .make_shell_command(job)
-            .expect_err("should be an error");
-
-        assert_eq!(error, "Could not read Home directory from environment.");
-
-        // If we don't re-create it, other tests will fail.
-        env::set_var("HOME", "/home/<test>");
     }
 
     #[test]
@@ -807,6 +861,29 @@ mod tests {
 
         assert!(!command.env.contains_key("HOME"));
         assert_eq!(command.home, "/home/<custom>");
+    }
+
+    #[test]
+    fn get_home_directory_error() {
+        env::remove_var("HOME");
+
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            schedule: String::from("@reboot"),
+            command: String::from("/usr/bin/bash ~/startup.sh"),
+            description: None,
+            section: None,
+        })]);
+
+        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
+        let error = crontab
+            .make_shell_command(job)
+            .expect_err("should be an error");
+
+        assert_eq!(error, "Could not read Home directory from environment.");
+
+        // If we don't re-create it, other tests will fail.
+        env::set_var("HOME", "/home/<test>");
     }
 
     #[test]
