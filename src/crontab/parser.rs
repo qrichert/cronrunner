@@ -649,6 +649,22 @@ mod tests {
     }
 
     #[test]
+    fn description_detection_does_not_fail_if_nothing_precedes_job() {
+        let tokens = Parser::parse("* * * * * printf 'hello, world'");
+
+        assert_eq!(
+            tokens,
+            vec![Token::CronJob(CronJob {
+                uid: 1,
+                schedule: String::from("* * * * *"),
+                command: String::from("printf 'hello, world'"),
+                description: None,
+                section: None,
+            })]
+        );
+    }
+
+    #[test]
     fn section_comments_are_detected() {
         let tokens = Parser::parse("### Job section");
 
@@ -791,6 +807,107 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_sections_are_joined_if_consecutive() {
+        let tokens = Parser::parse(
+            "
+            * * * * * printf 'hello, world'
+            ### Job section
+            * * * * * printf 'hello, world'
+            ### Job section
+            * * * * * printf 'hello, world'
+            ",
+        );
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::CronJob(CronJob {
+                    uid: 1,
+                    schedule: String::from("* * * * *"),
+                    command: String::from("printf 'hello, world'"),
+                    description: None,
+                    section: None,
+                }),
+                Token::Comment(Comment {
+                    value: String::from("Job section"),
+                    kind: CommentKind::Section,
+                }),
+                Token::CronJob(CronJob {
+                    uid: 2,
+                    schedule: String::from("* * * * *"),
+                    command: String::from("printf 'hello, world'"),
+                    description: None,
+                    section: Some(String::from("Job section")),
+                }),
+                Token::Comment(Comment {
+                    value: String::from("Job section"),
+                    kind: CommentKind::Section,
+                }),
+                Token::CronJob(CronJob {
+                    uid: 3,
+                    schedule: String::from("* * * * *"),
+                    command: String::from("printf 'hello, world'"),
+                    description: None,
+                    section: Some(String::from("Job section")),
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn duplicate_sections_are_treated_as_distinct() {
+        let tokens = Parser::parse(
+            "
+            ### Job section A
+            * * * * * printf 'hello, world'
+            ### Other section B
+            * * * * * printf 'hello, world'
+            ### Job section A
+            * * * * * printf 'hello, world'
+            ",
+        );
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Comment(Comment {
+                    value: String::from("Job section A"),
+                    kind: CommentKind::Section,
+                }),
+                Token::CronJob(CronJob {
+                    uid: 1,
+                    schedule: String::from("* * * * *"),
+                    command: String::from("printf 'hello, world'"),
+                    description: None,
+                    section: Some(String::from("Job section A")),
+                }),
+                Token::Comment(Comment {
+                    value: String::from("Other section B"),
+                    kind: CommentKind::Section,
+                }),
+                Token::CronJob(CronJob {
+                    uid: 2,
+                    schedule: String::from("* * * * *"),
+                    command: String::from("printf 'hello, world'"),
+                    description: None,
+                    section: Some(String::from("Other section B")),
+                }),
+                Token::Comment(Comment {
+                    value: String::from("Job section A"),
+                    kind: CommentKind::Section,
+                }),
+                Token::CronJob(CronJob {
+                    uid: 3,
+                    schedule: String::from("* * * * *"),
+                    command: String::from("printf 'hello, world'"),
+                    description: None,
+                    section: Some(String::from("Job section A")),
+                })
+            ]
+        );
+    }
+
+    #[test]
     fn empty_section_comments_do_not_clear_previous_sections() {
         let tokens = Parser::parse(
             "
@@ -903,22 +1020,6 @@ mod tests {
                     section: Some(String::from("Job section")),
                 }),
             ]
-        );
-    }
-
-    #[test]
-    fn description_detection_does_not_fail_if_nothing_precedes_job() {
-        let tokens = Parser::parse("* * * * * printf 'hello, world'");
-
-        assert_eq!(
-            tokens,
-            vec![Token::CronJob(CronJob {
-                uid: 1,
-                schedule: String::from("* * * * *"),
-                command: String::from("printf 'hello, world'"),
-                description: None,
-                section: None,
-            })]
         );
     }
 
