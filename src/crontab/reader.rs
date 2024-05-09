@@ -24,9 +24,9 @@ use std::process::{Command, Output};
 pub enum ReadErrorDetail {
     /// If the command succeeded with a non-zero exit code.
     NonZeroExit {
-        /// The exit code or `None` if the process was killed early.
+        /// The exit code, or `None` if the process was killed early.
         exit_code: Option<i32>,
-        /// Standard error or `None` if empty.
+        /// Standard error, or `None` if empty.
         stderr: Option<String>,
     },
     /// If the command failed to execute at all (e.g., `crontab`
@@ -44,7 +44,7 @@ pub struct ReadError {
     pub detail: ReadErrorDetail,
 }
 
-/// Read current user's `crontab`.
+/// Read current user's crontab.
 ///
 /// [`Reader`] only provides the [`read()`](Reader::read()) function
 /// that outputs a `String` or a [`ReadError`].
@@ -54,7 +54,7 @@ pub struct ReadError {
 pub struct Reader;
 
 impl Reader {
-    /// Read current user's `crontab` to a `String`.
+    /// Read current user's crontab to a `String`.
     ///
     /// # Examples
     ///
@@ -69,8 +69,8 @@ impl Reader {
     ///
     /// # Errors
     ///
-    /// Will return [`Err(ReadError)`](ReadError) if the `crontab`
-    /// cannot be read. This can happen when:
+    /// Will return [`Err(ReadError)`](ReadError) if the crontab cannot
+    /// be read. This can happen when:
     ///
     /// - The `crontab -l` command returns with a non-zero exit code or
     ///   no exit code at all (process terminated).
@@ -83,8 +83,8 @@ impl Reader {
         }
     }
 
-    // `Ok` means that there was no critical error and the executable could
-    // be run, NOT that the process exited with exit code 0.
+    /// `Ok` means that there was no critical error and the executable
+    /// could be run, NOT that the process exited with exit code 0.
     fn handle_output_ok(output: &Output) -> Result<String, ReadError> {
         if output.status.success() {
             // Exit 0

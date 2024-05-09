@@ -17,12 +17,12 @@
 use super::tokens::{Comment, CommentKind, CronJob, Token, Unknown, Variable};
 use std::str::Chars;
 
-/// Parse `crontab` into usable tokens.
+/// Parse crontab into usable tokens.
 ///
 /// [`Parser`] only provides the [`parse()`](Parser::parse()) function
 /// that outputs [`Token`]s.
 ///
-/// To read the current user's `crontab`, you can use
+/// To read the current user's crontab, you can use
 /// [`Reader::read()`](super::Reader::read()).
 ///
 /// The [`Vec<Token>`](Token) can be fed to [`Crontab`](super::Crontab)
@@ -30,7 +30,7 @@ use std::str::Chars;
 pub struct Parser;
 
 impl Parser {
-    /// Parse `crontab` into usable tokens.
+    /// Parse crontab into usable tokens.
     ///
     /// # Examples
     ///
@@ -54,7 +54,7 @@ impl Parser {
     /// # Errors
     ///
     /// This function does not `Err`. Worst case scenario an empty `Vec`
-    /// is returned (empty `crontab`) or [`Unknown`] tokens are produced
+    /// is returned (empty crontab) or [`Unknown`] tokens are produced
     /// if a line is not something [`Parser`] understands.
     #[must_use]
     pub fn parse(crontab: &str) -> Vec<Token> {

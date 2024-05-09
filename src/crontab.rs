@@ -26,7 +26,7 @@ pub use self::parser::Parser;
 pub use self::reader::{ReadError, ReadErrorDetail, Reader};
 pub use self::tokens::{CronJob, Token};
 
-/// Default shell used if not overridden by a variable in the `crontab`.
+/// Default shell used if not overridden by a variable in the crontab.
 const DEFAULT_SHELL: &str = "/bin/sh";
 
 #[derive(Debug)]
@@ -45,7 +45,7 @@ struct ShellCommand {
 pub enum RunResultDetail {
     /// If the command could be run.
     DidRun {
-        /// The exit code or `None` if the process was killed early.
+        /// The exit code, or `None` if the process was killed early.
         exit_code: Option<i32>,
     },
     /// If the command failed to execute at all (e.g., executable not
@@ -67,7 +67,7 @@ pub struct RunResult {
     pub detail: RunResultDetail,
 }
 
-/// Do things with jobs found in the `crontab`.
+/// Do things with jobs found in the crontab.
 ///
 /// Chiefly, [`Crontab`] provides the [`run()`](Crontab::run()) method,
 /// and takes a [`Vec<Token>`](Token) as input, usually from [`Parser`].
@@ -82,7 +82,7 @@ impl Crontab {
         Self { tokens }
     }
 
-    /// Whether there are jobs in the `crontab` at all.
+    /// Whether there are jobs in the crontab at all.
     ///
     /// Crontab could be empty or only contain variables, comments or
     /// unrecognized tokens.
@@ -108,7 +108,7 @@ impl Crontab {
             .collect()
     }
 
-    /// Whether a given job is in the `crontab` or not.
+    /// Whether a given job is in the crontab or not.
     #[must_use]
     pub fn has_job(&self, job: &CronJob) -> bool {
         self.jobs().iter().any(|x| *x == job)
@@ -150,8 +150,8 @@ impl Crontab {
     /// whether the run succeeded or not.
     ///
     /// [`RunResult::was_successful`] will be set to `true` if the
-    /// command ran _AND_ returns `0`, and will be set to `false` in any
-    /// other case.
+    /// command ran _AND_ returned `0`, and will be set to `false` in
+    /// any other case.
     ///
     /// Unless a run failed (as in the command was not run at all), the
     /// exit code will be provided in [`RunResult`] (but can be `None`
@@ -264,7 +264,7 @@ impl Crontab {
 
 /// Create an instance of [`Crontab`].
 ///
-/// This helper reads the current user's `crontab` and creates a
+/// This helper reads the current user's crontab and creates a
 /// [`Crontab`] instance out of it.
 ///
 /// # Examples
