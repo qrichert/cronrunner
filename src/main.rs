@@ -349,7 +349,7 @@ mod tests {
             entries,
             vec![
                 String::from("\u{1b}[0;92m1.\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'foo'"),
-                String::from("\n\u{1b}[1;4;97mThese jobs have a section\u{1b}[0m\n"),
+                String::from("\n\u{1b}[1;4mThese jobs have a section\u{1b}[0m\n"),
                 String::from("\u{1b}[0;92m2.\u{1b}[0m \u{1b}[0;90m@monthly\u{1b}[0m echo 'bar'"),
                 String::from("\u{1b}[0;92m3.\u{1b}[0m \u{1b}[0;90m@monthly\u{1b}[0m echo 'baz'"),
                 String::new(),

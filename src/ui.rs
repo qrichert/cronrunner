@@ -18,7 +18,7 @@
 //  pub const ERROR: &str = "\x1b[0;91m";
 //  pub const HIGHLIGHT: &str = "\x1b[0;92m";
 //  pub const ATTENUATE: &str = "\x1b[0;90m";
-//  pub const TITLE: &str = "\x1b[97;1;4m";
+//  pub const TITLE: &str = "\x1b[1;4m";
 //  pub const RESET: &str = "\x1b[0m";
 
 #[must_use]
@@ -38,7 +38,7 @@ pub fn color_attenuate(string: &str) -> String {
 
 #[must_use]
 pub fn color_title(string: &str) -> String {
-    format!("\x1b[1;4;97m{string}\x1b[0m")
+    format!("\x1b[1;4m{string}\x1b[0m")
 }
 
 #[cfg(test)]
@@ -70,10 +70,10 @@ mod tests {
     }
 
     #[test]
-    fn color_title_is_white_bold_underlined() {
+    fn color_title_is_bold_underlined() {
         assert_eq!(
-            color_title("this is white, bold, and underlined"),
-            "\x1b[1;4;97mthis is white, bold, and underlined\x1b[0m"
+            color_title("this is bold, and underlined"),
+            "\x1b[1;4mthis is bold, and underlined\x1b[0m"
         );
     }
 }
