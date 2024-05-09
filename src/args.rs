@@ -17,11 +17,10 @@
 use crate::ui::color_error;
 
 #[must_use]
-pub fn handle_cli_arguments(args: &[String]) -> Option<u8> {
-    // Skip 1st argument because it's the path to the executable.
-    let mut args = args.iter().skip(1);
+pub fn handle_cli_arguments(mut args: impl Iterator<Item = String>) -> Option<u8> {
+    args.next(); // Skip path to executable.
 
-    let arg = args.next()?;
+    let arg = args.next()?; // or `None`.
 
     if arg == "-h" || arg == "--help" {
         println!("{}", help_message());
@@ -33,7 +32,7 @@ pub fn handle_cli_arguments(args: &[String]) -> Option<u8> {
         return Some(0u8);
     }
 
-    eprintln!("{}", unexpected_argument_message(arg));
+    eprintln!("{}", unexpected_argument_message(&arg));
     Some(2u8)
 }
 
@@ -97,30 +96,31 @@ mod tests {
 
     #[test]
     fn no_arguments_because_first_is_skipped() {
-        let args: Vec<String> = vec![String::from("/usr/local/bin/cronrunner")];
+        let args = std::iter::once(String::from("/usr/local/bin/cronrunner"));
 
-        let res = handle_cli_arguments(&args);
+        let res = handle_cli_arguments(args);
 
         assert!(res.is_none());
     }
 
     #[test]
     fn no_arguments_not_even_executable_path() {
-        let args: Vec<String> = Vec::new();
+        let args = std::iter::empty();
 
-        let res = handle_cli_arguments(&args);
+        let res = handle_cli_arguments(args);
 
         assert!(res.is_none());
     }
 
     #[test]
     fn unexpected_argument() {
-        let args: Vec<String> = vec![
+        let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("--unknown"),
-        ];
+        ]
+        .into_iter();
 
-        let res = handle_cli_arguments(&args);
+        let res = handle_cli_arguments(args);
 
         assert_eq!(res, Some(2u8));
     }
@@ -136,37 +136,40 @@ mod tests {
 
     #[test]
     fn stops_after_first_argument_match() {
-        let args: Vec<String> = vec![
+        let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("--help"),
             String::from("--unknown"),
-        ];
+        ]
+        .into_iter();
 
-        let res = handle_cli_arguments(&args);
+        let res = handle_cli_arguments(args);
 
         assert_eq!(res, Some(0u8));
     }
 
     #[test]
     fn argument_help() {
-        let args: Vec<String> = vec![
+        let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("--help"),
-        ];
+        ]
+        .into_iter();
 
-        let res = handle_cli_arguments(&args);
+        let res = handle_cli_arguments(args);
 
         assert_eq!(res, Some(0u8));
     }
 
     #[test]
     fn argument_help_shorthand() {
-        let args: Vec<String> = vec![
+        let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("-h"),
-        ];
+        ]
+        .into_iter();
 
-        let res = handle_cli_arguments(&args);
+        let res = handle_cli_arguments(args);
 
         assert_eq!(res, Some(0u8));
     }
@@ -182,24 +185,26 @@ mod tests {
 
     #[test]
     fn argument_version() {
-        let args: Vec<String> = vec![
+        let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("--version"),
-        ];
+        ]
+        .into_iter();
 
-        let res = handle_cli_arguments(&args);
+        let res = handle_cli_arguments(args);
 
         assert_eq!(res, Some(0u8));
     }
 
     #[test]
     fn argument_version_shorthand() {
-        let args: Vec<String> = vec![
+        let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("-v"),
-        ];
+        ]
+        .into_iter();
 
-        let res = handle_cli_arguments(&args);
+        let res = handle_cli_arguments(args);
 
         assert_eq!(res, Some(0u8));
     }

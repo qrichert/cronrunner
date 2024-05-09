@@ -18,7 +18,6 @@ mod args;
 mod crontab;
 mod ui;
 
-use crate::args::handle_cli_arguments;
 use crate::crontab::{CronJob, ReadError, ReadErrorDetail, RunResult, RunResultDetail};
 use crate::ui::{color_attenuate, color_error, color_highlight, color_title};
 
@@ -28,8 +27,7 @@ use std::process::ExitCode;
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> ExitCode {
-    let args: Vec<String> = env::args().collect();
-    if let Some(exit_code) = handle_cli_arguments(&args) {
+    if let Some(exit_code) = args::handle_cli_arguments(env::args()) {
         return exit_code.into();
     }
 
