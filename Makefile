@@ -16,8 +16,6 @@ endef
 
 PREFIX ?= /usr/local
 
-SOURCE_DIRS := cronrunner tests
-
 .PHONY: all
 all: help
 
@@ -33,7 +31,7 @@ clean: ## Clean project files
 r: run
 .PHONY: run
 run: ## Build and run program
-	@cargo run
+	@cargo run --quiet
 
 .PHONY: b
 b: build
@@ -53,7 +51,7 @@ check: ## Most stringent checks (includes checks still in development)
 	@cargo fmt
 	@cargo doc --no-deps --all-features
 	@cargo check
-	@cargo clippy --all-targets --all-features -- -D warnings -W clippy::all -W clippy::cargo -W clippy::complexity -W clippy::correctness -W clippy::nursery -W clippy::pedantic -W clippy::perf -W clippy::style -W clippy::suspicious
+	@cargo clippy --all-targets --all-features -- -D warnings -W clippy::all -W clippy::cargo -W clippy::complexity -W clippy::correctness -W clippy::nursery -W clippy::pedantic -W clippy::perf -W clippy::style -W clippy::suspicious -A clippy::option_if_let_else
 	@make test
 
 .PHONY: t
