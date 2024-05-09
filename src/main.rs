@@ -15,11 +15,10 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 mod args;
-mod crontab;
 mod ui;
 
-use crate::crontab::{CronJob, ReadError, ReadErrorDetail, RunResult, RunResultDetail};
-use crate::ui::{color_attenuate, color_error, color_highlight, color_title};
+use cronrunner::crontab;
+use cronrunner::crontab::{CronJob, ReadError, ReadErrorDetail, RunResult, RunResultDetail};
 
 use std::env;
 use std::io::Write;
@@ -56,14 +55,14 @@ fn main() -> ExitCode {
         return exit_from_invalid_job_selection().into();
     };
 
-    println!("{} {}", color_highlight("$"), &job.command);
+    println!("{} {}", ui::color_highlight("$"), &job.command);
 
     let res = crontab.run(job);
     exit_from_run_result(res).into()
 }
 
 fn exit_from_crontab_read_error(error: ReadError) -> u8 {
-    eprintln!("{}", color_error(&error.reason));
+    eprintln!("{}", ui::color_error(&error.reason));
 
     if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = error.detail {
         if let Some(stderr) = stderr {
@@ -105,12 +104,12 @@ fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
             last_section = &job.section;
             menu.push(format!(
                 "\n{}\n",
-                color_title(job.section.as_ref().unwrap())
+                ui::color_title(job.section.as_ref().unwrap())
             ));
         }
 
         let padding = determine_uid_padding(job.uid, max_uid_width);
-        let number = color_highlight(&format!("{padding}{}.", job.uid));
+        let number = ui::color_highlight(&format!("{padding}{}.", job.uid));
 
         let description = if let Some(description) = &job.description {
             format!("{description} ")
@@ -118,12 +117,12 @@ fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
             String::new()
         };
 
-        let schedule = color_attenuate(&job.schedule);
+        let schedule = ui::color_attenuate(&job.schedule);
 
         let command = if description.is_empty() {
             String::from(&job.command)
         } else {
-            color_attenuate(&job.command)
+            ui::color_attenuate(&job.command)
         };
 
         menu.push(format!("{number} {description}{schedule} {command}"));
@@ -179,7 +178,7 @@ fn parse_user_job_selection(mut job_selected: String) -> Result<Option<u32>, ()>
 }
 
 fn exit_from_invalid_job_selection() -> u8 {
-    eprintln!("{}", color_error("Invalid job selection."));
+    eprintln!("{}", ui::color_error("Invalid job selection."));
     1u8
 }
 
@@ -191,7 +190,7 @@ fn exit_from_run_result(result: RunResult) -> u8 {
     let detail = result.detail;
 
     if let RunResultDetail::DidNotRun { reason } = detail {
-        eprintln!("{}", color_error(&reason));
+        eprintln!("{}", ui::color_error(&reason));
         return 1u8;
     }
 
