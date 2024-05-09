@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use crate::ui::color_error;
+use crate::ui;
 
 #[must_use]
 pub fn handle_cli_arguments(mut args: impl Iterator<Item = String>) -> Option<u8> {
@@ -40,7 +40,7 @@ fn help_message() -> String {
     [
         format!("{}\n", env!("CARGO_PKG_DESCRIPTION")),
         format!("Usage: {} [OPTIONS]\n", env!("CARGO_BIN_NAME")),
-        String::from(
+        format!(
             "
 Options:
   -h, --help           Show this message and exit.
@@ -50,30 +50,38 @@ Extras:
   Comments that start with two hashes (##) and immediately precede
   a job are used as description for that job.
 
-      ## Say hello.
-      @hourly echo \"hello\"
+      {comment}## Say hello.{reset}
+      {schedule}@hourly{reset} {command}echo \"hello\"{reset}
 
   This job will be presented like this:
 
-      1. Say hello. @hourly echo \"hello\"
+      {highlight}1.{reset} Say hello. {attenuate}@hourly echo \"hello\"{reset}
 
   Comments that start with three hashes (###) are used as section
   headers, up until a new section starts or up until the end.
 
-      ### Housekeeping
+      {comment}### Housekeeping{reset}
 
-      @daily docker image prune --force
+      {schedule}@daily{reset} {command}docker image prune --force{reset}
 
   This job will be presented like this:
 
-      Housekeeping
+      {title}Housekeeping{reset}
 
-      1. @daily docker image prune --force
+      {highlight}1.{reset} {attenuate}@daily{reset} docker image prune --force
 
   Descriptions and sections are independent from one another.
-      "
-            .trim(),
-        ),
+      ",
+            comment = "\x1b[96m",
+            schedule = "\x1b[38;5;224m",
+            command = "\x1b[93m",
+            title = ui::TITLE,
+            highlight = ui::HIGHLIGHT,
+            attenuate = ui::ATTENUATE,
+            reset = ui::RESET
+        )
+        .trim()
+        .to_string(),
     ]
     .join("\n")
 }
@@ -84,7 +92,7 @@ fn version_message() -> String {
 
 fn unexpected_argument_message(arg: &str) -> String {
     [
-        format!("{} unexpected argument '{arg}'.", color_error("Error:")),
+        format!("{} unexpected argument '{arg}'.", ui::color_error("Error:")),
         format!("Try '{} -h' for help.", env!("CARGO_BIN_NAME")),
     ]
     .join("\n")

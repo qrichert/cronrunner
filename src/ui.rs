@@ -14,31 +14,30 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// TODO: Colors as constants, so they can be used inside --help examples
-//  pub const ERROR: &str = "\x1b[0;91m";
-//  pub const HIGHLIGHT: &str = "\x1b[0;92m";
-//  pub const ATTENUATE: &str = "\x1b[0;90m";
-//  pub const TITLE: &str = "\x1b[1;4m";
-//  pub const RESET: &str = "\x1b[0m";
+pub const ERROR: &str = "\x1b[0;91m";
+pub const HIGHLIGHT: &str = "\x1b[0;92m";
+pub const ATTENUATE: &str = "\x1b[0;90m";
+pub const TITLE: &str = "\x1b[1;4m";
+pub const RESET: &str = "\x1b[0m";
 
 #[must_use]
 pub fn color_error(string: &str) -> String {
-    format!("\x1b[0;91m{string}\x1b[0m")
+    format!("{ERROR}{string}{RESET}")
 }
 
 #[must_use]
 pub fn color_highlight(string: &str) -> String {
-    format!("\x1b[0;92m{string}\x1b[0m")
+    format!("{HIGHLIGHT}{string}{RESET}")
 }
 
 #[must_use]
 pub fn color_attenuate(string: &str) -> String {
-    format!("\x1b[0;90m{string}\x1b[0m")
+    format!("{ATTENUATE}{string}{RESET}")
 }
 
 #[must_use]
 pub fn color_title(string: &str) -> String {
-    format!("\x1b[1;4m{string}\x1b[0m")
+    format!("{TITLE}{string}{RESET}")
 }
 
 #[cfg(test)]
