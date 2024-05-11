@@ -487,7 +487,7 @@ mod tests {
             section: None,
         })]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists");
+        let job = crontab.get_job_from_uid(1).unwrap();
 
         assert_eq!(
             *job,
@@ -539,10 +539,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(2).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(2).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         // If 'FOO=bar' is not included, it means the first of the twin
         // jobs was used instead of the second that we selected.
@@ -557,8 +555,7 @@ mod tests {
     fn working_directory_is_home_directory() {
         env::set_var("HOME", "/home/<test>");
 
-        let home_directory =
-            Crontab::get_home_directory().expect("the environment variable is set");
+        let home_directory = Crontab::get_home_directory().unwrap();
 
         assert_eq!(home_directory, "/home/<test>");
     }
@@ -573,10 +570,8 @@ mod tests {
             section: None,
         })]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(command.command, "/usr/bin/bash ~/startup.sh");
     }
@@ -597,10 +592,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(
             command.env,
@@ -640,10 +633,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(2).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(2).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(
             command.env,
@@ -672,10 +663,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(
             command.env,
@@ -694,10 +683,8 @@ mod tests {
             section: None,
         })]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(command.shell, DEFAULT_SHELL);
         assert_eq!(command.command, "cat a-file.txt");
@@ -719,10 +706,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(command.env, HashMap::new());
         assert_eq!(command.shell, "/bin/bash");
@@ -745,10 +730,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert!(!command.env.contains_key("SHELL"));
         assert_eq!(command.shell, "/bin/<custom>");
@@ -781,10 +764,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(2).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(2).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(command.shell, "/bin/zsh");
         assert_eq!(command.command, "echo 'I am echoed by zsh!'");
@@ -802,10 +783,8 @@ mod tests {
             section: None,
         })]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(command.home, "/home/<default>");
     }
@@ -828,10 +807,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(command.env, HashMap::new());
         assert_eq!(command.home, "/home/<custom>");
@@ -854,10 +831,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert!(!command.env.contains_key("HOME"));
         assert_eq!(command.home, "/home/<custom>");
@@ -875,7 +850,7 @@ mod tests {
             section: None,
         })]);
 
-        let job = crontab.get_job_from_uid(1).expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(1).unwrap();
         let error = crontab
             .make_shell_command(job)
             .expect_err("should be an error");
@@ -913,10 +888,8 @@ mod tests {
             }),
         ]);
 
-        let job = crontab.get_job_from_uid(2).expect("job exists in fixture");
-        let command = crontab
-            .make_shell_command(job)
-            .expect("job exists in fixture");
+        let job = crontab.get_job_from_uid(2).unwrap();
+        let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(command.home, "/home/user2");
         assert_eq!(command.command, "echo 'I run is user2's Home!'");

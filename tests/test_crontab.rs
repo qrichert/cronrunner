@@ -15,7 +15,7 @@ use std::env;
 fn correct_argument_is_passed_to_crontab() {
     mock_crontab("output_args");
 
-    let crontab = Reader::read().expect("should be an ok");
+    let crontab = Reader::read().unwrap();
 
     // crontab -l
     assert_eq!(crontab.trim(), "-l");
@@ -26,8 +26,8 @@ fn run_job_success() {
     mock_crontab("crontab_runnable_jobs");
     mock_shell("do_nothing");
 
-    let crontab = make_instance().expect("should be an ok");
-    let job = crontab.get_job_from_uid(2).expect("job exists");
+    let crontab = make_instance().unwrap();
+    let job = crontab.get_job_from_uid(2).unwrap();
 
     let res = crontab.run(job);
 
@@ -39,8 +39,8 @@ fn run_job_success() {
 fn run_job_error_shell_executable_not_found() {
     mock_crontab("crontab_bad_shell");
 
-    let crontab = make_instance().expect("should be an ok");
-    let job = crontab.get_job_from_uid(1).expect("job exists");
+    let crontab = make_instance().unwrap();
+    let job = crontab.get_job_from_uid(1).unwrap();
 
     let res = crontab.run(job);
 
@@ -57,7 +57,7 @@ fn run_job_error_shell_executable_not_found() {
 fn run_job_error_other_reason() {
     mock_crontab("crontab_runnable_jobs");
 
-    let crontab = make_instance().expect("should be an ok");
+    let crontab = make_instance().unwrap();
     let job_not_in_crontab = CronJob {
         uid: 42,
         schedule: String::from("@never"),
@@ -84,8 +84,8 @@ fn correct_job_is_run() {
     mock_crontab("crontab_runnable_jobs");
     mock_shell("output_args_to_file");
 
-    let crontab = make_instance().expect("should be an ok");
-    let job = crontab.get_job_from_uid(2).expect("job exists");
+    let crontab = make_instance().unwrap();
+    let job = crontab.get_job_from_uid(2).unwrap();
 
     let res = crontab.run(job);
 
@@ -101,8 +101,8 @@ fn edge_cases_with_variables() {
     mock_crontab("crontab_variables_edge_cases");
     mock_shell("output_stdout_stderr_to_file");
 
-    let crontab = make_instance().expect("should be an ok");
-    let job = crontab.get_job_from_uid(1).expect("job exists");
+    let crontab = make_instance().unwrap();
+    let job = crontab.get_job_from_uid(1).unwrap();
 
     let res = crontab.run(job);
 
@@ -131,7 +131,7 @@ fn edge_cases_with_variables() {
 fn make_instance_success() {
     mock_crontab("crontab_example");
 
-    let crontab = make_instance().expect("should be an ok");
+    let crontab = make_instance().unwrap();
 
     assert_eq!(
         crontab.tokens,

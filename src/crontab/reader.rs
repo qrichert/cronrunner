@@ -132,7 +132,7 @@ mod tests {
         };
 
         let res = Reader::handle_output_ok(&output);
-        let res = res.expect("should be an ok");
+        let res = res.unwrap();
 
         assert_eq!(res, "<stdout>");
     }
