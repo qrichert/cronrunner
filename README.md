@@ -7,31 +7,25 @@
 
 _Run cron jobs manually._[^1]
 
-```
-$ cronrunner
-1. @reboot /usr/bin/bash ~/startup.sh
-2. Update brew. 30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
-3. Print variable. * * * * * echo $FOO
->>> Select a job to run: 3
-$ echo $FOO
-bar
-```
+<p align="center">
+  <img src="./cronrunner.png" alt="cronrunner">
+</p>
 
 ```crontab
-# CronRunner Demo
-# ---------------
+# m h  dom mon dow   command
 
 @reboot /usr/bin/bash ~/startup.sh
 
-# Double-hash comments (##) immediately preceding a job are used as
-# description. See below:
+## Track disk space.
+30 4 * * * echo $(date) $(df -h | grep "/dev/sda3") >> .disk-space.txt
 
-## Update brew.
-30 20 * * * /usr/local/bin/brew update && /usr/local/bin/brew upgrade
+FOO=:)
+0 12 * * * echo $FOO
 
-FOO=bar
-## Print variable.
-* * * * * echo $FOO
+### Housekeeping
+
+## Prune dangling Docker images.
+@daily docker image prune --force
 ```
 
 ## Installation
