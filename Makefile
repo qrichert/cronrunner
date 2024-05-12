@@ -39,6 +39,10 @@ b: build
 build: ## Make optimized release build
 	@cargo build --release
 
+.PHONY: buildlinux
+buildlinux: ## Build linux executable through Docker
+	@docker run --rm -v $(shell pwd):/root/build -it $(shell docker build -q .) bash -c "make build && chown -R $(shell id -u):$(shell id -g) target/"
+
 .PHONY: l
 l: lint
 .PHONY: lint
@@ -83,6 +87,7 @@ coverage-pct: ## Ensure code coverage of 100%
 install: ## Install cronrunner
 	install -d $(PREFIX)/bin/
 	install ./target/release/cronrunner $(PREFIX)/bin/cronrunner
+	ln $(PREFIX)/bin/cronrunner $(PREFIX)/bin/cr 2>/dev/null || :
 
 %:
 	@$(call show_error_message,Unknown command '$@')
