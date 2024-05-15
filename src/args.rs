@@ -37,11 +37,12 @@ pub fn handle_cli_arguments(mut args: impl Iterator<Item = String>) -> Option<u8
 }
 
 fn help_message() -> String {
-    [
-        format!("{}\n", env!("CARGO_PKG_DESCRIPTION")),
-        format!("Usage: {} [OPTIONS]\n", env!("CARGO_BIN_NAME")),
-        format!(
-            "
+    format!(
+        "\
+{description}
+
+Usage: {bin} [OPTIONS]
+
 Options:
   -h, --help           Show this message and exit.
   -v, --version        Show the version and exit.
@@ -72,18 +73,16 @@ Extras:
 
   Descriptions and sections are independent from one another.
       ",
-            comment = "\x1b[96m",
-            schedule = "\x1b[38;5;224m",
-            command = "\x1b[93m",
-            title = ui::TITLE,
-            highlight = ui::HIGHLIGHT,
-            attenuate = ui::ATTENUATE,
-            reset = ui::RESET
-        )
-        .trim()
-        .to_string(),
-    ]
-    .join("\n")
+        description = env!("CARGO_PKG_DESCRIPTION"),
+        bin = env!("CARGO_BIN_NAME"),
+        comment = "\x1b[96m",
+        schedule = "\x1b[38;5;224m",
+        command = "\x1b[93m",
+        title = ui::TITLE,
+        highlight = ui::HIGHLIGHT,
+        attenuate = ui::ATTENUATE,
+        reset = ui::RESET
+    )
 }
 
 fn version_message() -> String {
@@ -91,11 +90,13 @@ fn version_message() -> String {
 }
 
 fn unexpected_argument_message(arg: &str) -> String {
-    [
-        format!("{} unexpected argument '{arg}'.", ui::color_error("Error:")),
-        format!("Try '{} -h' for help.", env!("CARGO_BIN_NAME")),
-    ]
-    .join("\n")
+    format!(
+        "\
+{error} unexpected argument '{arg}'.
+Try '{bin} -h' for help.",
+        error = ui::color_error("Error:"),
+        bin = env!("CARGO_BIN_NAME"),
+    )
 }
 
 #[cfg(test)]
@@ -183,10 +184,11 @@ mod tests {
     }
 
     #[test]
-    fn argument_help_message_contains_options() {
+    fn argument_help_message_contains_bin_name_and_options() {
         let message = help_message();
 
         dbg!(&message);
+        assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains("-h, --help"));
         assert!(message.contains("-v, --version"));
     }
