@@ -17,6 +17,21 @@
 use super::tokens::{Comment, CommentKind, CronJob, Token, Unknown, Variable};
 use std::str::Chars;
 
+/// Internal state for the [`Parser`].
+///
+/// This struct enables us to keep the simplified `Parser::parse()`
+/// API, without passing too many variables around.
+///
+/// Otherwise, [`Parser`] would need to hold its own state, which forces
+/// the user to bind an instance to a variable. This would be a major
+/// inconvenience compared to the little impact this solution has on
+/// code clarity.
+struct ParserState {
+    tokens: Vec<Token>,
+    job_uid: u32,
+    job_section: Option<String>,
+}
+
 /// Parse crontab into usable tokens.
 ///
 /// [`Parser`] only provides the [`parse()`](Parser::parse()) function
@@ -58,42 +73,34 @@ impl Parser {
     /// if a line is not something [`Parser`] understands.
     #[must_use]
     pub fn parse(crontab: &str) -> Vec<Token> {
-        let mut tokens = Vec::new();
-        let mut job_uid: u32 = 1;
-        let mut job_section: Option<String> = None;
+        let mut state = ParserState {
+            tokens: Vec::new(),
+            job_uid: 1,
+            job_section: None,
+        };
 
-        // TODO(refactor): This is getting unwieldy, separate into
-        //  lexing and parsing, even at the cost of doing two passes.
         for mut line in crontab.lines() {
             line = line.trim();
             if line.is_empty() {
                 continue;
             }
-            if Self::is_job(line) {
-                if let Ok(job_token) =
-                    Self::make_job_token(line, tokens.last(), job_uid, &job_section)
-                {
-                    job_uid += 1;
-                    tokens.push(job_token);
-                } else {
-                    tokens.push(Self::make_unknown_token(line));
-                }
-            } else if Self::is_variable(line) {
-                tokens.push(Self::make_variable_token(line));
-            } else if Self::is_comment(line) {
-                let comment = Self::make_comment_token(line);
-
-                if let Some(section) = Self::get_job_section(&comment) {
-                    job_section = Some(section);
-                }
-
-                tokens.push(comment);
-            } else {
-                tokens.push(Self::make_unknown_token(line));
-            }
+            let new_token = Self::make_token_from_line(line, &mut state);
+            state.tokens.push(new_token);
         }
 
-        tokens
+        state.tokens
+    }
+
+    fn make_token_from_line(line: &str, state: &mut ParserState) -> Token {
+        if Self::is_job(line) {
+            Self::make_token_from_job_line(line, state)
+        } else if Self::is_variable(line) {
+            Self::make_token_from_variable_line(line)
+        } else if Self::is_comment(line) {
+            Self::make_token_from_comment_line(line, state)
+        } else {
+            Self::make_token_from_unknown_line(line)
+        }
     }
 
     fn is_job(line: &str) -> bool {
@@ -102,26 +109,31 @@ impl Parser {
         "0123456789*@".contains(first_char)
     }
 
-    fn make_job_token(
-        line: &str,
-        previous_token: Option<&Token>,
-        job_uid: u32,
-        job_section: &Option<String>,
-    ) -> Result<Token, ()> {
+    fn make_token_from_job_line(line: &str, state: &mut ParserState) -> Token {
+        if let Ok(job_token) = Self::make_job_token(line, state) {
+            state.job_uid += 1;
+            job_token
+        } else {
+            Self::make_unknown_token(line)
+        }
+    }
+
+    fn make_job_token(line: &str, state: &ParserState) -> Result<Token, ()> {
         let (schedule, command) = Self::split_schedule_and_command(line);
 
         if schedule.is_empty() || command.is_empty() {
             return Err(());
         }
 
-        let description = Self::get_job_description(previous_token);
+        let previous_token = state.tokens.last();
+        let description = Self::get_job_description_if_any(previous_token);
 
         Ok(Token::CronJob(CronJob {
-            uid: job_uid,
+            uid: state.job_uid,
             schedule,
             command,
             description,
-            section: job_section.clone(),
+            section: state.job_section.clone(),
         }))
     }
 
@@ -201,7 +213,7 @@ impl Parser {
     ///
     /// This is cronrunner specific, and has nothing to do with Cron
     /// itself.
-    fn get_job_description(previous_token: Option<&Token>) -> Option<String> {
+    fn get_job_description_if_any(previous_token: Option<&Token>) -> Option<String> {
         if let Some(Token::Comment(Comment {
             value: description,
             kind: CommentKind::Description,
@@ -223,7 +235,7 @@ impl Parser {
     ///
     /// This is cronrunner specific, and has nothing to do with Cron
     /// itself.
-    fn get_job_section(comment_token: &Token) -> Option<String> {
+    fn get_job_section_if_any(comment_token: &Token) -> Option<String> {
         if let Token::Comment(Comment {
             value: section,
             kind: CommentKind::Section,
@@ -243,6 +255,10 @@ impl Parser {
         let first_char = line.chars().next().unwrap();
         // ^[a-zA-Z_"']
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\"'".contains(first_char)
+    }
+
+    fn make_token_from_variable_line(line: &str) -> Token {
+        Self::make_variable_token(line)
     }
 
     fn make_variable_token(line: &str) -> Token {
@@ -276,6 +292,16 @@ impl Parser {
 
     fn is_comment(line: &str) -> bool {
         line.starts_with('#')
+    }
+
+    fn make_token_from_comment_line(line: &str, state: &mut ParserState) -> Token {
+        let comment = Self::make_comment_token(line);
+
+        if let Some(section) = Self::get_job_section_if_any(&comment) {
+            state.job_section = Some(section);
+        }
+
+        comment
     }
 
     fn make_comment_token(line: &str) -> Token {
@@ -318,6 +344,10 @@ impl Parser {
 
     fn clean_regular_comment(line: &str) -> String {
         String::from(line[1..].trim_start())
+    }
+
+    fn make_token_from_unknown_line(line: &str) -> Token {
+        Self::make_unknown_token(line)
     }
 
     fn make_unknown_token(line: &str) -> Token {
