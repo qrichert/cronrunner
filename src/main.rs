@@ -66,12 +66,10 @@ fn exit_from_crontab_read_error(error: ReadError) -> u8 {
 
     if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = error.detail {
         if let Some(stderr) = stderr {
-            let stderr = strip_terminating_newline(&stderr);
-            eprintln!("{stderr}");
+            eprintln!("{}", strip_terminating_newline(&stderr));
         }
         if let Some(exit_code) = exit_code {
-            let exit_code = convert_i32_exit_code_to_u8_exit_code(exit_code);
-            return exit_code;
+            return convert_i32_exit_code_to_u8_exit_code(exit_code);
         }
     }
 
@@ -96,43 +94,23 @@ fn print_job_selection_menu(jobs: &Vec<&CronJob>) {
 fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
     let mut menu = Vec::new();
 
-    let mut last_section = &None;
+    let mut last_section = None;
     let max_uid_width = determine_max_uid_width(jobs);
 
     for &job in jobs {
-        if &job.section != last_section && job.section.is_some() {
-            last_section = &job.section;
-            menu.push(format!(
-                "\n{}\n",
-                ui::color_title(job.section.as_ref().unwrap())
-            ));
+        if let Some(new_section) = update_section_if_needed(job, &mut last_section) {
+            menu.push(format_job_section(new_section));
         }
 
-        let padding = determine_uid_padding(job.uid, max_uid_width);
-        let number = ui::color_highlight(&format!("{padding}{}.", job.uid));
-
-        let description = if let Some(description) = &job.description {
-            format!("{description} ")
-        } else {
-            String::new()
-        };
-
-        let schedule = ui::color_attenuate(&job.schedule);
-
-        let command = if description.is_empty() {
-            String::from(&job.command)
-        } else {
-            ui::color_attenuate(&job.command)
-        };
+        let number = format_job_uid(job.uid, max_uid_width);
+        let description = format_job_description(&job.description);
+        let schedule = format_job_schedule(&job.schedule);
+        let command = format_job_command(&job.command, !description.is_empty());
 
         menu.push(format!("{number} {description}{schedule} {command}"));
     }
 
-    // It looks weird having spacing around section titles,
-    // but not after the last job line.
-    if last_section.is_some() {
-        menu.push(String::new());
-    }
+    add_spacing_to_menu_if_it_has_sections(&mut menu, last_section.is_some());
 
     menu
 }
@@ -142,10 +120,58 @@ fn determine_max_uid_width(jobs: &[&CronJob]) -> usize {
     max_uid.to_string().len()
 }
 
+fn update_section_if_needed<'a>(
+    job: &CronJob,
+    last_section: &'a mut Option<String>,
+) -> Option<&'a String> {
+    if job.section.is_some() && job.section != *last_section {
+        last_section.clone_from(&job.section);
+        return last_section.as_ref();
+    }
+    None
+}
+
+fn format_job_section(section: &str) -> String {
+    format!("\n{}\n", ui::color_title(section))
+}
+
+fn format_job_uid(uid: u32, max_uid_width: usize) -> String {
+    let padding = determine_uid_padding(uid, max_uid_width);
+    ui::color_highlight(&format!("{padding}{uid}."))
+}
+
 fn determine_uid_padding(job_uid: u32, width: usize) -> String {
     let job_uid = job_uid.to_string();
     let padding_length = width.saturating_sub(job_uid.len());
     " ".repeat(padding_length)
+}
+
+fn format_job_description(description: &Option<String>) -> String {
+    if let Some(description) = description {
+        format!("{description} ")
+    } else {
+        String::new()
+    }
+}
+
+fn format_job_schedule(schedule: &str) -> String {
+    ui::color_attenuate(schedule)
+}
+
+fn format_job_command(command: &str, has_description: bool) -> String {
+    if has_description {
+        ui::color_attenuate(command)
+    } else {
+        String::from(command)
+    }
+}
+
+fn add_spacing_to_menu_if_it_has_sections(menu: &mut Vec<String>, has_sections: bool) {
+    // It looks weird having spacing around section titles,
+    // but not after the last job line.
+    if has_sections {
+        menu.push(String::new());
+    }
 }
 
 #[cfg(not(tarpaulin_include))]
