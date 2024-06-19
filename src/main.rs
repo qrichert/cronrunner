@@ -186,11 +186,11 @@ fn get_user_selection() -> Result<Option<u32>, ()> {
         .read_line(&mut job_selected)
         .expect("cannot read user input");
 
-    parse_user_job_selection(job_selected)
+    parse_user_job_selection(&job_selected)
 }
 
-fn parse_user_job_selection(mut job_selected: String) -> Result<Option<u32>, ()> {
-    job_selected = String::from(job_selected.trim());
+fn parse_user_job_selection(job_selected: &str) -> Result<Option<u32>, ()> {
+    let job_selected = String::from(job_selected.trim());
 
     if job_selected.is_empty() {
         return Ok(None);
@@ -438,7 +438,7 @@ mod tests {
 
     #[test]
     fn parse_user_job_selection_success() {
-        let selection = parse_user_job_selection(String::from("1"))
+        let selection = parse_user_job_selection("1")
             .expect("valid input")
             .expect("non empty input");
 
@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn parse_user_job_selection_success_with_whitespace() {
-        let selection = parse_user_job_selection(String::from("   1337   \n"))
+        let selection = parse_user_job_selection(&String::from("   1337   \n"))
             .expect("valid input")
             .expect("non empty input");
 
@@ -456,14 +456,14 @@ mod tests {
 
     #[test]
     fn parse_user_job_selection_success_but_empty() {
-        let selection = parse_user_job_selection(String::from("    \n")).expect("valid input");
+        let selection = parse_user_job_selection("    \n").expect("valid input");
 
         assert!(selection.is_none());
     }
 
     #[test]
     fn parse_user_job_selection_error() {
-        let selection = parse_user_job_selection(String::from("-1"));
+        let selection = parse_user_job_selection("-1");
 
         assert_eq!(selection, Err(()));
     }
