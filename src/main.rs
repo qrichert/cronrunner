@@ -18,7 +18,9 @@ mod args;
 mod ui;
 
 use cronrunner::crontab;
-use cronrunner::crontab::{CronJob, ReadError, ReadErrorDetail, RunResult, RunResultDetail};
+use cronrunner::crontab::{
+    CronJob, JobDescription, JobSection, ReadError, ReadErrorDetail, RunResult, RunResultDetail,
+};
 
 use std::env;
 use std::io::Write;
@@ -122,8 +124,8 @@ fn determine_max_uid_width(jobs: &[&CronJob]) -> usize {
 
 fn update_section_if_needed<'a>(
     job: &CronJob,
-    last_section: &'a mut Option<String>,
-) -> Option<&'a String> {
+    last_section: &'a mut Option<JobSection>,
+) -> Option<&'a JobSection> {
     if job.section.is_some() && job.section != *last_section {
         last_section.clone_from(&job.section);
         return last_section.as_ref();
@@ -131,8 +133,8 @@ fn update_section_if_needed<'a>(
     None
 }
 
-fn format_job_section(section: &str) -> String {
-    format!("\n{}\n", ui::color_title(section))
+fn format_job_section(section: &JobSection) -> String {
+    format!("\n{}\n", ui::color_title(&section.to_string()))
 }
 
 fn format_job_uid(uid: u32, max_uid_width: usize) -> String {
@@ -146,7 +148,7 @@ fn determine_uid_padding(job_uid: u32, width: usize) -> String {
     " ".repeat(padding_length)
 }
 
-fn format_job_description(description: &Option<String>) -> String {
+fn format_job_description(description: &Option<JobDescription>) -> String {
     if let Some(description) = description {
         format!("{description} ")
     } else {
@@ -327,7 +329,7 @@ mod tests {
                 uid: 2,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'buongiorno'"),
-                description: Some(String::from("This job has a description")),
+                description: Some(JobDescription(String::from("This job has a description"))),
                 section: None,
             },
         ];
@@ -358,14 +360,20 @@ mod tests {
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'bar'"),
                 description: None,
-                section: Some(String::from("These jobs have a section")),
+                section: Some(JobSection {
+                    uid: 1,
+                    title: String::from("These jobs have a section"),
+                }),
             },
             CronJob {
                 uid: 3,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'baz'"),
                 description: None,
-                section: Some(String::from("These jobs have a section")),
+                section: Some(JobSection {
+                    uid: 2,
+                    title: String::from("These jobs have a section"),
+                }),
             },
         ];
 
@@ -377,6 +385,7 @@ mod tests {
                 String::from("\u{1b}[0;92m1.\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'foo'"),
                 String::from("\n\u{1b}[1;4mThese jobs have a section\u{1b}[0m\n"),
                 String::from("\u{1b}[0;92m2.\u{1b}[0m \u{1b}[0;90m@monthly\u{1b}[0m echo 'bar'"),
+                String::from("\n\u{1b}[1;4mThese jobs have a section\u{1b}[0m\n"),
                 String::from("\u{1b}[0;92m3.\u{1b}[0m \u{1b}[0;90m@monthly\u{1b}[0m echo 'baz'"),
                 String::new(),
             ]

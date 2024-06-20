@@ -24,7 +24,7 @@ use std::process::Command;
 
 pub use self::parser::Parser;
 pub use self::reader::{ReadError, ReadErrorDetail, Reader};
-pub use self::tokens::{CronJob, Token};
+pub use self::tokens::{CronJob, JobDescription, JobSection, Token};
 
 /// Default shell used if not overridden by a variable in the crontab.
 const DEFAULT_SHELL: &str = "/bin/sh";
@@ -332,7 +332,7 @@ mod tests {
                 uid: 2,
                 schedule: String::from("30 20 * * *"),
                 command: String::from("/usr/local/bin/brew update && /usr/local/bin/brew upgrade"),
-                description: Some(String::from("Update brew.")),
+                description: Some(JobDescription(String::from("Update brew."))),
                 section: None,
             }),
             Token::Variable(Variable {
@@ -347,7 +347,7 @@ mod tests {
                 uid: 3,
                 schedule: String::from("* * * * *"),
                 command: String::from("echo $FOO"),
-                description: Some(String::from("Print variable.")),
+                description: Some(JobDescription(String::from("Print variable."))),
                 section: None,
             }),
             Token::Comment(Comment {
@@ -523,7 +523,7 @@ mod tests {
                 uid: 1,
                 schedule: String::from("@daily"),
                 command: String::from("df -h > ~/track_disk_usage.txt"),
-                description: Some(String::from("Track disk usage.")),
+                description: Some(JobDescription(String::from("Track disk usage."))),
                 section: None,
             }),
             Token::Variable(Variable {
@@ -534,7 +534,7 @@ mod tests {
                 uid: 2,
                 schedule: String::from("@daily"),
                 command: String::from("df -h > ~/track_disk_usage.txt"),
-                description: Some(String::from("Track disk usage.")),
+                description: Some(JobDescription(String::from("Track disk usage."))),
                 section: None,
             }),
         ]);
@@ -566,7 +566,7 @@ mod tests {
             uid: 1,
             schedule: String::from("@reboot"),
             command: String::from("/usr/bin/bash ~/startup.sh"),
-            description: Some(String::from("Description.")),
+            description: Some(JobDescription(String::from("Description."))),
             section: None,
         })]);
 
@@ -587,7 +587,7 @@ mod tests {
                 uid: 1,
                 schedule: String::from("* * * * *"),
                 command: String::from("echo $FOO"),
-                description: Some(String::from("Print variable.")),
+                description: Some(JobDescription(String::from("Print variable."))),
                 section: None,
             }),
         ]);
@@ -617,7 +617,7 @@ mod tests {
                 uid: 1,
                 schedule: String::from("* * * * *"),
                 command: String::from("echo $FOO"),
-                description: Some(String::from("Print variable.")),
+                description: Some(JobDescription(String::from("Print variable."))),
                 section: None,
             }),
             Token::Comment(Comment {

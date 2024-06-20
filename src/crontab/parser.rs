@@ -14,7 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-use super::tokens::{Comment, CommentKind, CronJob, Token, Unknown, Variable};
+use super::tokens::{
+    Comment, CommentKind, CronJob, JobDescription, JobSection, Token, Unknown, Variable,
+};
 use std::str::Chars;
 
 /// Internal state for the [`Parser`].
@@ -29,7 +31,7 @@ use std::str::Chars;
 struct ParserState {
     tokens: Vec<Token>,
     job_uid: u32,
-    job_section: Option<String>,
+    job_section: Option<JobSection>,
 }
 
 /// Parse crontab into usable tokens.
@@ -213,14 +215,14 @@ impl Parser {
     ///
     /// This is cronrunner specific, and has nothing to do with Cron
     /// itself.
-    fn get_job_description_if_any(previous_token: Option<&Token>) -> Option<String> {
+    fn get_job_description_if_any(previous_token: Option<&Token>) -> Option<JobDescription> {
         if let Some(Token::Comment(Comment {
             value: description,
             kind: CommentKind::Description,
         })) = previous_token
         {
             if !description.is_empty() {
-                return Some(description.clone());
+                return Some(JobDescription(description.clone()));
             }
         }
         None
@@ -235,14 +237,21 @@ impl Parser {
     ///
     /// This is cronrunner specific, and has nothing to do with Cron
     /// itself.
-    fn get_job_section_if_any(comment_token: &Token) -> Option<String> {
+    fn get_job_section_if_any(comment_token: &Token, state: &ParserState) -> Option<JobSection> {
         if let Token::Comment(Comment {
             value: section,
             kind: CommentKind::Section,
         }) = comment_token
         {
             if !section.is_empty() {
-                return Some(section.clone());
+                let uid = state
+                    .job_section
+                    .as_ref()
+                    .map_or(1, |section| section.uid + 1);
+                return Some(JobSection {
+                    uid,
+                    title: section.clone(),
+                });
             }
         }
         None
@@ -297,7 +306,7 @@ impl Parser {
     fn make_token_from_comment_line(line: &str, state: &mut ParserState) -> Token {
         let comment = Self::make_comment_token(line);
 
-        if let Some(section) = Self::get_job_section_if_any(&comment) {
+        if let Some(section) = Self::get_job_section_if_any(&comment, state) {
             state.job_section = Some(section);
         }
 
@@ -425,7 +434,7 @@ mod tests {
                     command: String::from(
                         "/usr/local/bin/brew update && /usr/local/bin/brew upgrade"
                     ),
-                    description: Some(String::from("Update brew.")),
+                    description: Some(JobDescription(String::from("Update brew."))),
                     section: None,
                 }),
                 Token::Comment(Comment {
@@ -444,8 +453,11 @@ mod tests {
                     uid: 3,
                     schedule: String::from("* * * * *"),
                     command: String::from("echo $FOO"),
-                    description: Some(String::from("Print variable.")),
-                    section: Some(String::from("Some testing going on here...")),
+                    description: Some(JobDescription(String::from("Print variable."))),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Some testing going on here...")
+                    }),
                 }),
                 Token::Comment(Comment {
                     value: String::from("Do nothing (this is a regular comment)."),
@@ -456,7 +468,10 @@ mod tests {
                     schedule: String::from("@reboot"),
                     command: String::from(":"),
                     description: None,
-                    section: Some(String::from("Some testing going on here...")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Some testing going on here...")
+                    }),
                 })
             ]
         );
@@ -649,7 +664,7 @@ mod tests {
                     uid: 1,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
-                    description: Some(String::from("Job description")),
+                    description: Some(JobDescription(String::from("Job description"))),
                     section: None,
                 })
             ]
@@ -748,14 +763,20 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section")
+                    }),
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section")
+                    }),
                 })
             ]
         );
@@ -819,7 +840,10 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section 2")),
+                    section: Some(JobSection {
+                        uid: 2,
+                        title: String::from("Job section 2")
+                    }),
                 }),
                 Token::Comment(Comment {
                     value: String::from("Job section 3"),
@@ -830,14 +854,17 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section 3")),
+                    section: Some(JobSection {
+                        uid: 3,
+                        title: String::from("Job section 3")
+                    }),
                 })
             ]
         );
     }
 
     #[test]
-    fn duplicate_sections_are_joined_if_consecutive() {
+    fn duplicate_sections_are_kept_separate_even_if_consecutive() {
         let tokens = Parser::parse(
             "
             * * * * * printf 'hello, world'
@@ -867,7 +894,10 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section")
+                    }),
                 }),
                 Token::Comment(Comment {
                     value: String::from("Job section"),
@@ -878,10 +908,28 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section")),
+                    section: Some(JobSection {
+                        uid: 2,
+                        title: String::from("Job section")
+                    }),
                 })
             ]
         );
+
+        let Token::CronJob(CronJob {
+            section: section1, ..
+        }) = &tokens[2]
+        else {
+            panic!()
+        };
+        let Token::CronJob(CronJob {
+            section: section2, ..
+        }) = &tokens[4]
+        else {
+            panic!()
+        };
+
+        assert_ne!(section1, section2);
     }
 
     #[test]
@@ -909,7 +957,10 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section A")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section A")
+                    }),
                 }),
                 Token::Comment(Comment {
                     value: String::from("Other section B"),
@@ -920,7 +971,10 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Other section B")),
+                    section: Some(JobSection {
+                        uid: 2,
+                        title: String::from("Other section B")
+                    }),
                 }),
                 Token::Comment(Comment {
                     value: String::from("Job section A"),
@@ -931,7 +985,10 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section A")),
+                    section: Some(JobSection {
+                        uid: 3,
+                        title: String::from("Job section A")
+                    }),
                 })
             ]
         );
@@ -968,7 +1025,10 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section")
+                    }),
                 }),
                 Token::Comment(Comment {
                     value: String::new(),
@@ -979,7 +1039,10 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section")
+                    }),
                 })
             ]
         );
@@ -1012,15 +1075,21 @@ mod tests {
                     uid: 1,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
-                    description: Some(String::from("Job description")),
-                    section: Some(String::from("Job section")),
+                    description: Some(JobDescription(String::from("Job description"))),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section")
+                    }),
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
-                    section: Some(String::from("Job section")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section")
+                    }),
                 })
             ]
         );
@@ -1047,7 +1116,10 @@ mod tests {
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'buongiorno'"),
                     description: None,
-                    section: Some(String::from("Job section")),
+                    section: Some(JobSection {
+                        uid: 1,
+                        title: String::from("Job section")
+                    }),
                 }),
             ]
         );

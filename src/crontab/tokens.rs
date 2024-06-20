@@ -31,11 +31,11 @@ pub struct CronJob {
     /// An optional (cronrunner-specific) description of the job. This
     /// is set by preceding the job with a double-hash (`##`) comment in
     /// the crontab.
-    pub description: Option<String>,
+    pub description: Option<JobDescription>,
     /// An optional (cronrunner-specific) parent section for the job.
     /// Sections are defined by triple-hash (`###`) comments in the
     /// crontab.
-    pub section: Option<String>,
+    pub section: Option<JobSection>,
 }
 
 impl fmt::Display for CronJob {
@@ -67,6 +67,32 @@ pub struct Comment {
     pub kind: CommentKind,
 }
 
+// The reason job descriptions have their own struct is that job
+// sections have their own struct, and it feels weird to have one as a
+// struct but not the other.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct JobDescription(pub String);
+
+impl fmt::Display for JobDescription {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+// Job sections have their own struct because we need some way (`uid`)
+// to differentiate them even if their content is the same.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct JobSection {
+    pub uid: u32,
+    pub title: String,
+}
+
+impl fmt::Display for JobSection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.title)
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Unknown {
     pub value: String,
@@ -90,7 +116,7 @@ mod tests {
             uid: 1,
             schedule: String::from("@hourly"),
             command: String::from("sleep 3599"),
-            description: Some(String::from("Sleep (almost) forever.")),
+            description: Some(JobDescription(String::from("Sleep (almost) forever."))),
             section: None,
         };
 
@@ -112,5 +138,22 @@ mod tests {
         let job_display = cronjob.to_string();
 
         assert_eq!(job_display, "@hourly sleep 3599");
+    }
+
+    #[test]
+    fn job_description_display() {
+        let description = JobDescription(String::from("hello, world"));
+
+        assert_eq!(description.to_string(), "hello, world");
+    }
+
+    #[test]
+    fn job_description_section() {
+        let section = JobSection {
+            uid: 36,
+            title: String::from("foo bar baz"),
+        };
+
+        assert_eq!(section.to_string(), "foo bar baz");
     }
 }
