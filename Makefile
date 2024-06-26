@@ -17,7 +17,7 @@ endef
 PREFIX ?= /usr/local
 
 .PHONY: all
-all: help
+all: build
 
 .PHONY: help
 help: ## Show this help message
@@ -87,7 +87,7 @@ coverage-pct: ## Ensure code coverage of 100%
 install: ## Install cronrunner
 	install -d $(PREFIX)/bin/
 	install ./target/release/cronrunner $(PREFIX)/bin/cronrunner
-	ln $(PREFIX)/bin/cronrunner $(PREFIX)/bin/cr 2>/dev/null || :
+	ln -sf $(PREFIX)/bin/cronrunner $(PREFIX)/bin/cr 2>/dev/null
 
 %:
 	@$(call show_error_message,Unknown command '$@')

@@ -23,7 +23,7 @@ use cronrunner::crontab::{
 };
 
 use std::env;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::process::ExitCode;
 
 #[cfg(not(tarpaulin_include))]
@@ -40,12 +40,16 @@ fn main() -> ExitCode {
         return exit_from_no_runnable_jobs().into();
     }
 
-    print_job_selection_menu(&crontab.jobs());
+    let job_selected = if let Some(job) = read_job_selection_from_stdin() {
+        job
+    } else {
+        print_job_selection_menu(&crontab.jobs());
 
-    let job_selected = match get_user_selection() {
-        Err(()) => return exit_from_invalid_job_selection().into(),
-        Ok(None) => return ExitCode::SUCCESS,
-        Ok(Some(job_selected)) => job_selected,
+        match get_user_selection() {
+            Err(()) => return exit_from_invalid_job_selection().into(),
+            Ok(None) => return ExitCode::SUCCESS,
+            Ok(Some(job)) => job,
+        }
     };
 
     if job_selected == 42 && crontab.jobs().len() < 42 {
@@ -85,6 +89,23 @@ fn strip_terminating_newline(text: &str) -> &str {
 fn exit_from_no_runnable_jobs() -> u8 {
     println!("No jobs to run.");
     0u8
+}
+
+#[cfg(not(tarpaulin_include))]
+fn read_job_selection_from_stdin() -> Option<u32> {
+    // If the descriptor/handle refers to a terminal/tty, there is
+    // nothing in stdin to be consumed yet.
+    if std::io::stdin().is_terminal() {
+        return None;
+    }
+    let mut job_selected = String::new();
+    if std::io::stdin().read_line(&mut job_selected).is_err() {
+        return None;
+    }
+    match parse_user_job_selection(&job_selected) {
+        Ok(Some(job_selected)) => Some(job_selected),
+        _ => None,
+    }
 }
 
 #[cfg(not(tarpaulin_include))]
