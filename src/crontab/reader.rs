@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::error::Error;
+use std::fmt;
 use std::process::{Command, Output};
 
 /// Low level detail about the error.
@@ -38,11 +40,19 @@ pub enum ReadErrorDetail {
 #[derive(Debug, Eq, PartialEq)]
 pub struct ReadError {
     /// Explanation of the error in plain English.
-    pub reason: String,
+    pub reason: &'static str,
     /// Detail about the error. May contain exit code and stderr, see
     /// [`ReadErrorDetail`].
     pub detail: ReadErrorDetail,
 }
+
+impl fmt::Display for ReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.reason)
+    }
+}
+
+impl Error for ReadError {}
 
 /// Read current user's crontab.
 ///
@@ -94,7 +104,7 @@ impl Reader {
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
             Err(ReadError {
-                reason: String::from("Cannot read crontab of current user."),
+                reason: "Cannot read crontab of current user.",
                 detail: ReadErrorDetail::NonZeroExit {
                     exit_code: output.status.code(),
                     stderr: if stderr.is_empty() {
@@ -111,7 +121,7 @@ impl Reader {
     /// executable is missing.
     fn handle_output_err() -> Result<String, ReadError> {
         Err(ReadError {
-            reason: String::from("Unable to locate the crontab executable on the system."),
+            reason: "Unable to locate the crontab executable on the system.",
             detail: ReadErrorDetail::CouldNotRunCommand,
         })
     }
@@ -122,6 +132,16 @@ mod tests {
     use super::*;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
+
+    #[test]
+    fn readerror_format() {
+        let error = ReadError {
+            reason: "an error has occurred",
+            detail: ReadErrorDetail::CouldNotRunCommand,
+        };
+
+        assert_eq!(error.to_string(), "an error has occurred");
+    }
 
     #[test]
     fn successful_read() {
@@ -151,7 +171,7 @@ mod tests {
         assert_eq!(
             res,
             ReadError {
-                reason: String::from("Cannot read crontab of current user."),
+                reason: "Cannot read crontab of current user.",
                 detail: ReadErrorDetail::NonZeroExit {
                     // For some reason, there seems to be no way to create a
                     // proper `ExitStatus` from scratch. `::from_raw(1)` is
@@ -190,7 +210,7 @@ mod tests {
         assert_eq!(
             res,
             ReadError {
-                reason: String::from("Unable to locate the crontab executable on the system."),
+                reason: "Unable to locate the crontab executable on the system.",
                 detail: ReadErrorDetail::CouldNotRunCommand,
             }
         );

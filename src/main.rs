@@ -68,7 +68,7 @@ fn main() -> ExitCode {
 }
 
 fn exit_from_crontab_read_error(error: ReadError) -> u8 {
-    eprintln!("{}", ui::color_error(&error.reason));
+    eprintln!("{}", ui::color_error(error.reason));
 
     if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = error.detail {
         if let Some(stderr) = stderr {
@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn exit_from_crontab_read_error_with_non_zero_with_exit_code() {
         let error = ReadError {
-            reason: String::from("Could not run command."),
+            reason: "Could not run command.",
             detail: ReadErrorDetail::NonZeroExit {
                 stderr: Some(String::from("Bad arguments.")),
                 exit_code: Some(2i32),
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn exit_from_crontab_read_error_without_exit_code() {
         let error = ReadError {
-            reason: String::from("Could not run command."),
+            reason: "Could not run command.",
             detail: ReadErrorDetail::NonZeroExit {
                 stderr: None,
                 exit_code: None,
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn exit_from_crontab_read_error_could_not_run_command() {
         let error = ReadError {
-            reason: String::from("Could not run command."),
+            reason: "Could not run command.",
             detail: ReadErrorDetail::CouldNotRunCommand,
         };
 

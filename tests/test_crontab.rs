@@ -221,7 +221,7 @@ fn make_instance_error_reading_crontab() {
     assert_eq!(
         error,
         ReadError {
-            reason: String::from("Cannot read crontab of current user."),
+            reason: "Cannot read crontab of current user.",
             detail: ReadErrorDetail::NonZeroExit {
                 exit_code: Some(2),
                 stderr: Some(String::from("crontab: illegal option -- <test>\n")),
@@ -241,7 +241,7 @@ fn make_instance_error_running_crontab_command() {
     assert_eq!(
         error,
         ReadError {
-            reason: String::from("Unable to locate the crontab executable on the system."),
+            reason: "Unable to locate the crontab executable on the system.",
             detail: ReadErrorDetail::CouldNotRunCommand,
         }
     );
