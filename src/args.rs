@@ -16,27 +16,44 @@
 
 use crate::ui;
 
-#[must_use]
-pub fn handle_cli_arguments(mut args: impl Iterator<Item = String>) -> Option<u8> {
-    args.next(); // Skip path to executable.
-
-    let arg = args.next()?; // or `None`.
-
-    if arg == "-h" || arg == "--help" {
-        println!("{}", help_message());
-        return Some(0u8);
-    }
-
-    if arg == "-v" || arg == "--version" {
-        println!("{}", version_message());
-        return Some(0u8);
-    }
-
-    eprintln!("{}", unexpected_argument_message(&arg));
-    Some(2u8)
+#[derive(Debug, Eq, PartialEq)]
+pub struct Config {
+    pub help: bool,
+    pub version: bool,
 }
 
-fn help_message() -> String {
+impl Config {
+    pub fn new() -> Self {
+        Self {
+            help: false,
+            version: false,
+        }
+    }
+
+    pub fn make_from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
+        let mut config = Self::new();
+
+        #[allow(clippy::never_loop)]
+        for arg in args.skip(1) {
+            if arg == "-h" || arg == "--help" {
+                config.help = true;
+                break;
+            }
+
+            if arg == "-v" || arg == "--version" {
+                config.version = true;
+                break;
+            }
+
+            return Err(arg);
+        }
+
+        Ok(config)
+    }
+}
+
+// TODO: Split extras out to --help --verbose or something
+pub fn help_message() -> String {
     format!(
         "\
 {description}
@@ -72,7 +89,7 @@ Extras:
       {highlight}1.{reset} {attenuate}@daily{reset} docker image prune --force
 
   Descriptions and sections are independent from one another.
-      ",
+",
         description = env!("CARGO_PKG_DESCRIPTION"),
         bin = env!("CARGO_BIN_NAME"),
         comment = "\x1b[96m",
@@ -85,11 +102,11 @@ Extras:
     )
 }
 
-fn version_message() -> String {
+pub fn version_message() -> String {
     format!("{} {}", env!("CARGO_BIN_NAME"), env!("CARGO_PKG_VERSION"))
 }
 
-fn unexpected_argument_message(arg: &str) -> String {
+pub fn unexpected_argument_error_message(arg: &str) -> String {
     format!(
         "\
 {error} unexpected argument '{arg}'.
@@ -107,18 +124,18 @@ mod tests {
     fn no_arguments_because_first_is_skipped() {
         let args = std::iter::once(String::from("/usr/local/bin/cronrunner"));
 
-        let res = handle_cli_arguments(args);
+        let config = Config::make_from_args(args).unwrap();
 
-        assert!(res.is_none());
+        assert_eq!(config, Config::new());
     }
 
     #[test]
     fn no_arguments_not_even_executable_path() {
         let args = std::iter::empty();
 
-        let res = handle_cli_arguments(args);
+        let config = Config::make_from_args(args).unwrap();
 
-        assert!(res.is_none());
+        assert_eq!(config, Config::new());
     }
 
     #[test]
@@ -129,32 +146,18 @@ mod tests {
         ]
         .into_iter();
 
-        let res = handle_cli_arguments(args);
+        let config = Config::make_from_args(args).err().unwrap();
 
-        assert_eq!(res, Some(2u8));
+        assert_eq!(config, "--unknown");
     }
 
     #[test]
     fn unexpected_argument_message_contains_argument_and_help() {
-        let message = unexpected_argument_message("--unexpected");
+        let message = unexpected_argument_error_message("--unexpected");
 
         dbg!(&message);
         assert!(message.contains("--unexpected"));
         assert!(message.contains("-h"));
-    }
-
-    #[test]
-    fn stops_after_first_argument_match() {
-        let args = [
-            String::from("/usr/local/bin/cronrunner"),
-            String::from("--help"),
-            String::from("--unknown"),
-        ]
-        .into_iter();
-
-        let res = handle_cli_arguments(args);
-
-        assert_eq!(res, Some(0u8));
     }
 
     #[test]
@@ -165,9 +168,9 @@ mod tests {
         ]
         .into_iter();
 
-        let res = handle_cli_arguments(args);
+        let config = Config::make_from_args(args).unwrap();
 
-        assert_eq!(res, Some(0u8));
+        assert!(config.help);
     }
 
     #[test]
@@ -178,13 +181,27 @@ mod tests {
         ]
         .into_iter();
 
-        let res = handle_cli_arguments(args);
+        let config = Config::make_from_args(args).unwrap();
 
-        assert_eq!(res, Some(0u8));
+        assert!(config.help);
     }
 
     #[test]
-    fn argument_help_message_contains_bin_name_and_options() {
+    fn help_stops_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--help"),
+            String::from("--unknown"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(config.help);
+    }
+
+    #[test]
+    fn help_message_contains_bin_name_and_options() {
         let message = help_message();
 
         dbg!(&message);
@@ -201,9 +218,9 @@ mod tests {
         ]
         .into_iter();
 
-        let res = handle_cli_arguments(args);
+        let config = Config::make_from_args(args).unwrap();
 
-        assert_eq!(res, Some(0u8));
+        assert!(config.version);
     }
 
     #[test]
@@ -214,13 +231,27 @@ mod tests {
         ]
         .into_iter();
 
-        let res = handle_cli_arguments(args);
+        let config = Config::make_from_args(args).unwrap();
 
-        assert_eq!(res, Some(0u8));
+        assert!(config.version);
     }
 
     #[test]
-    fn argument_version_message_contains_binary_name_and_version() {
+    fn version_stops_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--version"),
+            String::from("--unknown"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(config.version);
+    }
+
+    #[test]
+    fn version_message_contains_binary_name_and_version() {
         let message = version_message();
 
         dbg!(&message);

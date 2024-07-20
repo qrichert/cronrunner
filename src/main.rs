@@ -28,13 +28,22 @@ use std::process::ExitCode;
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> ExitCode {
-    if let Some(exit_code) = args::handle_cli_arguments(env::args()) {
-        return exit_code.into();
+    let config = match args::Config::make_from_args(env::args()) {
+        Ok(config) => config,
+        Err(arg) => return exit_from_argument_error(&arg).into(),
+    };
+
+    if config.help {
+        println!("{}", args::help_message());
+        return ExitCode::SUCCESS;
+    } else if config.version {
+        println!("{}", args::version_message());
+        return ExitCode::SUCCESS;
     }
 
     let crontab = match crontab::make_instance() {
         Ok(crontab) => crontab,
-        Err(error) => return exit_from_crontab_read_error(error).into(),
+        Err(error) => return exit_from_crontab_read_error(&error).into(),
     };
     if !crontab.has_runnable_jobs() {
         return exit_from_no_runnable_jobs().into();
@@ -67,15 +76,20 @@ fn main() -> ExitCode {
     exit_from_run_result(res).into()
 }
 
-fn exit_from_crontab_read_error(error: ReadError) -> u8 {
+fn exit_from_argument_error(arg: &str) -> u8 {
+    eprintln!("{}", args::unexpected_argument_error_message(arg));
+    2u8
+}
+
+fn exit_from_crontab_read_error(error: &ReadError) -> u8 {
     eprintln!("{}", ui::color_error(error.reason));
 
-    if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = error.detail {
+    if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = &error.detail {
         if let Some(stderr) = stderr {
-            eprintln!("{}", strip_terminating_newline(&stderr));
+            eprintln!("{}", strip_terminating_newline(stderr));
         }
         if let Some(exit_code) = exit_code {
-            return convert_i32_exit_code_to_u8_exit_code(exit_code);
+            return convert_i32_exit_code_to_u8_exit_code(*exit_code);
         }
     }
 
@@ -115,7 +129,7 @@ fn print_job_selection_menu(jobs: &Vec<&CronJob>) {
 }
 
 fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
-    let mut menu = Vec::new();
+    let mut menu = Vec::with_capacity(jobs.len());
 
     let mut last_section = None;
     let max_uid_width = determine_max_uid_width(jobs);
@@ -267,6 +281,15 @@ mod tests {
     use super::*;
 
     #[test]
+    fn exit_from_argument_error_regular() {
+        let arg = "--unknown";
+
+        let exit_code = exit_from_argument_error(arg);
+
+        assert_eq!(exit_code, 2u8);
+    }
+
+    #[test]
     fn exit_from_crontab_read_error_with_non_zero_with_exit_code() {
         let error = ReadError {
             reason: "Could not run command.",
@@ -276,7 +299,7 @@ mod tests {
             },
         };
 
-        let exit_code = exit_from_crontab_read_error(error);
+        let exit_code = exit_from_crontab_read_error(&error);
 
         assert_eq!(exit_code, 2u8);
     }
@@ -291,7 +314,7 @@ mod tests {
             },
         };
 
-        let exit_code = exit_from_crontab_read_error(error);
+        let exit_code = exit_from_crontab_read_error(&error);
 
         assert_eq!(exit_code, 1u8);
     }
@@ -303,7 +326,7 @@ mod tests {
             detail: ReadErrorDetail::CouldNotRunCommand,
         };
 
-        let exit_code = exit_from_crontab_read_error(error);
+        let exit_code = exit_from_crontab_read_error(&error);
 
         assert_eq!(exit_code, 1u8);
     }
