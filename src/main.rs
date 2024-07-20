@@ -80,7 +80,7 @@ fn main() -> ExitCode {
 
 fn exit_from_argument_error(arg: &str) -> u8 {
     eprintln!("{}", args::unexpected_argument_error_message(arg));
-    2u8
+    2
 }
 
 fn exit_from_crontab_read_error(error: &ReadError) -> u8 {
@@ -95,7 +95,7 @@ fn exit_from_crontab_read_error(error: &ReadError) -> u8 {
         }
     }
 
-    1u8
+    1
 }
 
 fn strip_terminating_newline(text: &str) -> &str {
@@ -104,7 +104,7 @@ fn strip_terminating_newline(text: &str) -> &str {
 
 fn exit_from_no_runnable_jobs() -> u8 {
     println!("No jobs to run.");
-    0u8
+    0
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -244,19 +244,19 @@ fn parse_user_job_selection(job_selected: &str) -> Result<Option<u32>, ()> {
 
 fn exit_from_invalid_job_selection() -> u8 {
     eprintln!("{}", ui::color_error("Invalid job selection."));
-    1u8
+    1
 }
 
 fn exit_from_run_result(result: RunResult) -> u8 {
     if result.was_successful {
-        return 0u8;
+        return 0;
     }
 
     let detail = result.detail;
 
     if let RunResultDetail::DidNotRun { reason } = detail {
         eprintln!("{}", ui::color_error(&reason));
-        return 1u8;
+        return 1;
     }
 
     if let RunResultDetail::DidRun {
@@ -267,7 +267,7 @@ fn exit_from_run_result(result: RunResult) -> u8 {
         return exit_code;
     }
 
-    1u8
+    1
 }
 
 fn convert_i32_exit_code_to_u8_exit_code(code: i32) -> u8 {
@@ -275,7 +275,7 @@ fn convert_i32_exit_code_to_u8_exit_code(code: i32) -> u8 {
     if code >= i32::from(u8::MIN) && code <= i32::from(u8::MAX) {
         return u8::try_from(code).expect("bounds have been checked already");
     }
-    1u8 // Default to generic exit 1.
+    1 // Default to generic exit 1.
 }
 
 #[cfg(test)]
@@ -288,7 +288,7 @@ mod tests {
 
         let exit_code = exit_from_argument_error(arg);
 
-        assert_eq!(exit_code, 2u8);
+        assert_eq!(exit_code, 2);
     }
 
     #[test]
@@ -297,13 +297,13 @@ mod tests {
             reason: "Could not run command.",
             detail: ReadErrorDetail::NonZeroExit {
                 stderr: Some(String::from("Bad arguments.")),
-                exit_code: Some(2i32),
+                exit_code: Some(2),
             },
         };
 
         let exit_code = exit_from_crontab_read_error(&error);
 
-        assert_eq!(exit_code, 2u8);
+        assert_eq!(exit_code, 2);
     }
 
     #[test]
@@ -318,7 +318,7 @@ mod tests {
 
         let exit_code = exit_from_crontab_read_error(&error);
 
-        assert_eq!(exit_code, 1u8);
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
@@ -330,7 +330,7 @@ mod tests {
 
         let exit_code = exit_from_crontab_read_error(&error);
 
-        assert_eq!(exit_code, 1u8);
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
@@ -358,7 +358,7 @@ mod tests {
     fn exit_from_no_runnable_jobs_is_success() {
         let exit_code = exit_from_no_runnable_jobs();
 
-        assert_eq!(exit_code, 0u8);
+        assert_eq!(exit_code, 0);
     }
 
     #[test]
@@ -497,7 +497,7 @@ mod tests {
             .expect("valid input")
             .expect("non empty input");
 
-        assert_eq!(selection, 1u32);
+        assert_eq!(selection, 1);
     }
 
     #[test]
@@ -506,7 +506,7 @@ mod tests {
             .expect("valid input")
             .expect("non empty input");
 
-        assert_eq!(selection, 1337u32);
+        assert_eq!(selection, 1337);
     }
 
     #[test]
@@ -527,21 +527,19 @@ mod tests {
     fn exit_from_invalid_job_selection_is_error() {
         let exit_code = exit_from_invalid_job_selection();
 
-        assert_eq!(exit_code, 1u8);
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
     fn exit_from_run_result_success() {
         let result = RunResult {
             was_successful: true,
-            detail: RunResultDetail::DidRun {
-                exit_code: Some(0i32),
-            },
+            detail: RunResultDetail::DidRun { exit_code: Some(0) },
         };
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 0u8);
+        assert_eq!(exit_code, 0);
     }
 
     #[test]
@@ -555,7 +553,7 @@ mod tests {
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 1u8);
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
@@ -563,13 +561,13 @@ mod tests {
         let result = RunResult {
             was_successful: false,
             detail: RunResultDetail::DidRun {
-                exit_code: Some(42i32),
+                exit_code: Some(42),
             },
         };
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 42u8);
+        assert_eq!(exit_code, 42);
     }
 
     #[test]
@@ -581,7 +579,7 @@ mod tests {
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 1u8);
+        assert_eq!(exit_code, 1);
     }
 
     #[test]
