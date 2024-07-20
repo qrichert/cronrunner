@@ -20,6 +20,7 @@ use crate::ui;
 pub struct Config {
     pub help: bool,
     pub version: bool,
+    pub detach: bool,
     pub job: Option<u32>,
 }
 
@@ -28,6 +29,7 @@ impl Config {
         Self {
             help: false,
             version: false,
+            detach: false,
             job: None,
         }
     }
@@ -45,6 +47,11 @@ impl Config {
             if arg == "-v" || arg == "--version" {
                 config.version = true;
                 break;
+            }
+
+            if arg == "-d" || arg == "--detach" {
+                config.detach = true;
+                continue;
             }
 
             if let Ok(job) = arg.parse::<u32>() {
@@ -68,11 +75,12 @@ pub fn help_message() -> String {
         "\
 {description}
 
-Usage: {bin} [OPTIONS]
+Usage: {bin} [OPTIONS] [ID]
 
 Options:
   -h, --help           Show this message and exit.
   -v, --version        Show the version and exit.
+  -d, --detach         Run job in background.
 
 Extras:
   Comments that start with two hashes (##) and immediately precede
@@ -218,6 +226,7 @@ mod tests {
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains("-h, --help"));
         assert!(message.contains("-v, --version"));
+        assert!(message.contains("-d, --detach"));
     }
 
     #[test]
@@ -267,6 +276,47 @@ mod tests {
         dbg!(&message);
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn argument_detach() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--detach"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(config.detach);
+    }
+
+    #[test]
+    fn argument_detach_shorthand() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("-d"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(config.detach);
+    }
+
+    #[test]
+    fn argument_detach_continues_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--detach"),
+            String::from("42"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(config.detach);
+        assert!(matches!(config.job, Some(42)));
     }
 
     #[test]

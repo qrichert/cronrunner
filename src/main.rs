@@ -74,7 +74,11 @@ fn main() -> ExitCode {
 
     println!("{} {}", ui::color_highlight("$"), &job.command);
 
-    let res = crontab.run(job);
+    let res = if config.detach {
+        crontab.run_detached(job)
+    } else {
+        crontab.run(job)
+    };
     exit_from_run_result(res).into()
 }
 
@@ -252,22 +256,20 @@ fn exit_from_run_result(result: RunResult) -> u8 {
         return 0;
     }
 
-    let detail = result.detail;
-
-    if let RunResultDetail::DidNotRun { reason } = detail {
-        eprintln!("{}", ui::color_error(&reason));
-        return 1;
+    match result.detail {
+        RunResultDetail::DidNotRun { reason } => {
+            eprintln!("{}", ui::color_error(&reason));
+            1
+        }
+        RunResultDetail::DidRun { exit_code: None } => 1,
+        RunResultDetail::DidRun {
+            exit_code: Some(exit_code),
+        } => convert_i32_exit_code_to_u8_exit_code(exit_code),
+        RunResultDetail::IsRunning { pid } => {
+            println!("{pid}");
+            0
+        }
     }
-
-    if let RunResultDetail::DidRun {
-        exit_code: Some(exit_code),
-    } = detail
-    {
-        let exit_code = convert_i32_exit_code_to_u8_exit_code(exit_code);
-        return exit_code;
-    }
-
-    1
 }
 
 fn convert_i32_exit_code_to_u8_exit_code(code: i32) -> u8 {
@@ -557,7 +559,19 @@ mod tests {
     }
 
     #[test]
-    fn exit_from_run_result_error_but_did_run_with_exit_code() {
+    fn exit_from_run_result_error_did_run_without_exit_code() {
+        let result = RunResult {
+            was_successful: false,
+            detail: RunResultDetail::DidRun { exit_code: None },
+        };
+
+        let exit_code = exit_from_run_result(result);
+
+        assert_eq!(exit_code, 1);
+    }
+
+    #[test]
+    fn exit_from_run_result_error_did_run_with_exit_code() {
         let result = RunResult {
             was_successful: false,
             detail: RunResultDetail::DidRun {
@@ -571,15 +585,15 @@ mod tests {
     }
 
     #[test]
-    fn exit_from_run_result_error_but_did_run_without_exit_code() {
+    fn exit_from_run_result_child_process_is_running() {
         let result = RunResult {
             was_successful: false,
-            detail: RunResultDetail::DidRun { exit_code: None },
+            detail: RunResultDetail::IsRunning { pid: 1337 },
         };
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 1);
+        assert_eq!(exit_code, 0);
     }
 
     #[test]

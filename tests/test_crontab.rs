@@ -36,6 +36,20 @@ fn run_job_success() {
 }
 
 #[test]
+fn run_job_detached_success() {
+    mock_crontab("crontab_runnable_jobs");
+    mock_shell("do_nothing");
+
+    let crontab = make_instance().unwrap();
+    let job = crontab.get_job_from_uid(2).unwrap();
+
+    let res = crontab.run_detached(job);
+
+    assert!(!res.was_successful); // We don't know yet, it's running!
+    matches!(res.detail, RunResultDetail::IsRunning { pid: _ });
+}
+
+#[test]
 fn run_job_error_shell_executable_not_found() {
     mock_crontab("crontab_bad_shell");
 
@@ -43,6 +57,24 @@ fn run_job_error_shell_executable_not_found() {
     let job = crontab.get_job_from_uid(1).unwrap();
 
     let res = crontab.run(job);
+
+    assert!(!res.was_successful);
+    assert_eq!(
+        res.detail,
+        RunResultDetail::DidNotRun {
+            reason: String::from("Failed to run command (does shell exist?).")
+        }
+    );
+}
+
+#[test]
+fn run_job_detached_error_shell_executable_not_found() {
+    mock_crontab("crontab_bad_shell");
+
+    let crontab = make_instance().unwrap();
+    let job = crontab.get_job_from_uid(1).unwrap();
+
+    let res = crontab.run_detached(job);
 
     assert!(!res.was_successful);
     assert_eq!(
@@ -69,6 +101,32 @@ fn run_job_error_other_reason() {
     // We could trigger any error here, besides obviously a problem with
     // the shell executable.
     let res = crontab.run(&job_not_in_crontab);
+
+    assert!(!res.was_successful);
+    assert_eq!(
+        res.detail,
+        RunResultDetail::DidNotRun {
+            reason: String::from("The given job is not in the crontab.")
+        }
+    );
+}
+
+#[test]
+fn run_job_detached_error_other_reason() {
+    mock_crontab("crontab_runnable_jobs");
+
+    let crontab = make_instance().unwrap();
+    let job_not_in_crontab = CronJob {
+        uid: 42,
+        schedule: String::from("@never"),
+        command: String::from("sleep infinity"),
+        description: None,
+        section: None,
+    };
+
+    // We could trigger any error here, besides obviously a problem with
+    // the shell executable.
+    let res = crontab.run_detached(&job_not_in_crontab);
 
     assert!(!res.was_successful);
     assert_eq!(

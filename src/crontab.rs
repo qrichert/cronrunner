@@ -20,7 +20,7 @@ pub mod tokens;
 
 use std::collections::HashMap;
 use std::env;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 pub use self::parser::Parser;
 pub use self::reader::{ReadError, ReadErrorDetail, Reader};
@@ -54,6 +54,9 @@ pub enum RunResultDetail {
         /// Explanation of the error in plain English.
         reason: String,
     },
+    /// If the command is run in detached mode and the child process got
+    /// spawned successfully.
+    IsRunning { pid: u32 },
 }
 
 /// Info about a run, provided by [`Crontab`] once it is finished.
@@ -61,6 +64,17 @@ pub enum RunResultDetail {
 pub struct RunResult {
     /// Whether the command was successful or not. _Successful_ means
     /// the command ran _AND_ exited without errors (exit 0).
+    ///
+    /// <div class="warning">
+    ///
+    /// Commands ran in detached mode will set `was_successful` to
+    /// `false`. This is not a special case according to the previous
+    /// definition (the command did not yet exit), but it can be
+    /// surprising. Instead, detached commands take advantage of
+    /// `detail` to tell whether it was launched successfully, and
+    /// provide a PID in that case.
+    ///
+    /// </div>
     pub was_successful: bool,
     /// Detail about the run. May contain exit code or reason of
     /// failure, see [`RunResultDetail`].
@@ -164,23 +178,12 @@ impl Crontab {
     /// - The shell executable cannot be found.
     #[must_use]
     pub fn run(&self, job: &CronJob) -> RunResult {
-        let command = match self.make_shell_command(job) {
+        let mut command = match self.prepare_command(job) {
             Ok(command) => command,
-            Err(reason) => {
-                return RunResult {
-                    was_successful: false,
-                    detail: RunResultDetail::DidNotRun { reason },
-                }
-            }
+            Err(res) => return res,
         };
 
-        let status = Command::new(command.shell)
-            // .env_clear() // TODO: Cleaner env?
-            .envs(&command.env)
-            .current_dir(command.home)
-            .arg("-c")
-            .arg(command.command)
-            .status();
+        let status = command.status();
 
         match status {
             Ok(status) => RunResult {
@@ -196,6 +199,96 @@ impl Crontab {
                 },
             },
         }
+    }
+
+    /// Run and detach job.
+    ///
+    /// Mostly the same as [`Crontab::run()`], but doesn't wait for the
+    /// job to be finished (returns immediately).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use cronrunner::crontab::{CronJob, Crontab, RunResult, RunResultDetail, Token};
+    /// #
+    /// # let crontab: Crontab = Crontab::new(vec![Token::CronJob(CronJob {
+    /// #     uid: 1,
+    /// #     schedule: String::new(),
+    /// #     command: String::new(),
+    /// #     description: None,
+    /// #     section: None,
+    /// # })]);
+    /// #
+    /// let job: &CronJob = crontab.get_job_from_uid(1).expect("pretend it exists");
+    ///
+    /// let result: RunResult = crontab.run_detached(job);
+    ///
+    /// if let RunResultDetail::IsRunning { pid } = result.detail {
+    ///     // ...
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`Crontab::run()`] will return a [`RunResult`] regardless of
+    /// whether the run succeeded or not.
+    ///
+    /// [`RunResult::was_successful`] will always be set to `false`,
+    /// because the job is only spawned, we don't wait for it to finish.
+    ///
+    /// [`RunResult::detail`] will be [`RunResultDetail::IsRunning`],
+    /// which will contain the PID of the spawned process.
+    #[must_use]
+    pub fn run_detached(&self, job: &CronJob) -> RunResult {
+        let mut command = match self.prepare_command(job) {
+            Ok(command) => command,
+            Err(res) => return res,
+        };
+
+        let child = command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+
+        match child {
+            Ok(child) => RunResult {
+                // We don't know yet, and `false` enables us to take
+                // advantage of `detail` more easily, as calling code
+                // will naturally fall back to it.
+                was_successful: false,
+                detail: RunResultDetail::IsRunning { pid: child.id() },
+            },
+            Err(_) => RunResult {
+                was_successful: false,
+                detail: RunResultDetail::DidNotRun {
+                    reason: String::from("Failed to run command (does shell exist?)."),
+                },
+            },
+        }
+    }
+
+    fn prepare_command(&self, job: &CronJob) -> Result<Command, RunResult> {
+        let shell_command = match self.make_shell_command(job) {
+            Ok(shell_command) => shell_command,
+            Err(reason) => {
+                return Err(RunResult {
+                    was_successful: false,
+                    detail: RunResultDetail::DidNotRun { reason },
+                });
+            }
+        };
+
+        let mut command = Command::new(shell_command.shell);
+
+        command
+            // .env_clear() // TODO: Cleaner env?
+            .envs(&shell_command.env)
+            .current_dir(shell_command.home)
+            .arg("-c")
+            .arg(shell_command.command);
+
+        Ok(command)
     }
 
     fn make_shell_command(&self, job: &CronJob) -> Result<ShellCommand, String> {

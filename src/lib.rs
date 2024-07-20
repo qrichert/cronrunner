@@ -31,6 +31,8 @@
 //!   get a job's instance from its UID.
 //! - [`Crontab::run()`](crontab::Crontab::run) Run a job (taking into
 //!   account any crontab variable defined before the job).
+//! - [`Crontab::run_detached()`](crontab::Crontab::run_detached) Same
+//!   as `run()`, but return instead of waiting for the job to finish.
 //!
 //! ## Lower level
 //!
