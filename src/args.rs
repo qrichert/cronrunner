@@ -20,6 +20,7 @@ use crate::ui;
 pub struct Config {
     pub help: bool,
     pub version: bool,
+    pub job: Option<u32>,
 }
 
 impl Config {
@@ -27,6 +28,7 @@ impl Config {
         Self {
             help: false,
             version: false,
+            job: None,
         }
     }
 
@@ -43,6 +45,14 @@ impl Config {
             if arg == "-v" || arg == "--version" {
                 config.version = true;
                 break;
+            }
+
+            if let Ok(job) = arg.parse::<u32>() {
+                #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
+                {
+                    config.job = Some(job);
+                    continue;
+                }
             }
 
             return Err(arg);
@@ -187,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn help_stops_after_match() {
+    fn argument_help_stops_after_match() {
         let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("--help"),
@@ -237,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn version_stops_after_match() {
+    fn argument_version_stops_after_match() {
         let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("--version"),
@@ -257,5 +267,33 @@ mod tests {
         dbg!(&message);
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn argument_job() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("42"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(matches!(config.job, Some(42)));
+    }
+
+    #[test]
+    fn argument_job_continues_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("42"),
+            String::from("--version"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(matches!(config.job, Some(42)));
+        assert!(config.version);
     }
 }

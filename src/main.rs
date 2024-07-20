@@ -49,7 +49,9 @@ fn main() -> ExitCode {
         return exit_from_no_runnable_jobs().into();
     }
 
-    let job_selected = if let Some(job) = read_job_selection_from_stdin() {
+    let job_selected = if let Some(job) = config.job {
+        job
+    } else if let Some(job) = read_job_selection_from_stdin() {
         job
     } else {
         print_job_selection_menu(&crontab.jobs());
