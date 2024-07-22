@@ -80,7 +80,21 @@ Usage: {bin} [OPTIONS] [ID]
 Options:
   -h, --help           Show this message and exit.
   -v, --version        Show the version and exit.
-  -d, --detach         Run job in background.
+  -d, --detach         Run job in the background.
+
+Examples:
+  If you know the ID of a job, you can run it directly:
+
+      {attenuate}# Run job number 1.{reset}
+      {highlight}${reset} {bin} 1
+      Running...
+
+  If the job takes a long time to run, you can detach it:
+
+      {attenuate}# Prints the PID and exits.{reset}
+      {highlight}${reset} {bin} --detach 3
+      1337
+      {highlight}${reset} _
 
 Extras:
   Comments that start with two hashes (##) and immediately precede
