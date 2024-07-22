@@ -14,17 +14,18 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-mod args;
-mod ui;
+mod cli;
+
+use std::env;
+use std::io::{IsTerminal, Write};
+use std::process::ExitCode;
 
 use cronrunner::crontab;
 use cronrunner::crontab::{
     CronJob, JobDescription, JobSection, ReadError, ReadErrorDetail, RunResult, RunResultDetail,
 };
 
-use std::env;
-use std::io::{IsTerminal, Write};
-use std::process::ExitCode;
+use crate::cli::{args, ui};
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> ExitCode {
