@@ -30,17 +30,17 @@ FOO=:)
 
 ## Installation
 
-<!--
 ### Directly
 
 ```console
-$ wget https://github.com/qrichert/cronrunner/...
+$ wget https://github.com/qrichert/cronrunner/releases/download/X.X.X/cronrunner-X.X.X-xxx
+$ sudo install ./cronrunner-* /usr/local/bin/cronrunner
+$ sudo ln -s /usr/local/bin/cronrunner /usr/local/bin/cr
 ```
 
 ### Manual Build
--->
 
-### System-wide
+#### System-wide
 
 ```console
 $ git clone https://github.com/qrichert/cronrunner.git
@@ -49,9 +49,10 @@ $ make build
 $ sudo make install
 ```
 
-### Through Cargo
+#### Through Cargo
 
 ```shell
+cargo install cronrunner
 cargo install --git https://github.com/qrichert/cronrunner.git
 ```
 
