@@ -180,14 +180,7 @@ fn format_job_section(section: &JobSection) -> String {
 }
 
 fn format_job_uid(uid: u32, max_uid_width: usize) -> String {
-    let padding = determine_uid_padding(uid, max_uid_width);
-    ui::color_highlight(&format!("{padding}{uid}."))
-}
-
-fn determine_uid_padding(job_uid: u32, width: usize) -> String {
-    let job_uid = job_uid.to_string();
-    let padding_length = width.saturating_sub(job_uid.len());
-    " ".repeat(padding_length)
+    ui::color_highlight(&format!("{uid:>max_uid_width$}."))
 }
 
 fn format_job_description(description: &Option<JobDescription>) -> String {
