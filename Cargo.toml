@@ -13,4 +13,7 @@ categories = ["command-line-utilities"]
 [profile.release]
 strip = true
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin_include)'] }
+
 [dependencies]
