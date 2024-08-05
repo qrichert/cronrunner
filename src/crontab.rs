@@ -944,9 +944,7 @@ mod tests {
         })]);
 
         let job = crontab.get_job_from_uid(1).unwrap();
-        let error = crontab
-            .make_shell_command(job)
-            .expect_err("should be an error");
+        let error = crontab.make_shell_command(job).unwrap_err();
 
         assert_eq!(error, "Could not read Home directory from environment.");
 
@@ -1005,9 +1003,7 @@ mod tests {
             section: None,
         };
 
-        let error = crontab
-            .make_shell_command(&job_not_in_crontab)
-            .expect_err("the job is not in the crontab");
+        let error = crontab.make_shell_command(&job_not_in_crontab).unwrap_err();
 
         assert_eq!(error, "The given job is not in the crontab.");
     }

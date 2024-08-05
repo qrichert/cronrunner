@@ -489,9 +489,7 @@ mod tests {
 
     #[test]
     fn parse_user_job_selection_success() {
-        let selection = parse_user_job_selection("1")
-            .expect("valid input")
-            .expect("non empty input");
+        let selection = parse_user_job_selection("1").unwrap().unwrap();
 
         assert_eq!(selection, 1);
     }
@@ -499,15 +497,15 @@ mod tests {
     #[test]
     fn parse_user_job_selection_success_with_whitespace() {
         let selection = parse_user_job_selection(&String::from("   1337   \n"))
-            .expect("valid input")
-            .expect("non empty input");
+            .unwrap()
+            .unwrap();
 
         assert_eq!(selection, 1337);
     }
 
     #[test]
     fn parse_user_job_selection_success_but_empty() {
-        let selection = parse_user_job_selection("    \n").expect("valid input");
+        let selection = parse_user_job_selection("    \n").unwrap();
 
         assert!(selection.is_none());
     }

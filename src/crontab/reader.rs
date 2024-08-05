@@ -151,8 +151,7 @@ mod tests {
             stderr: b"<stderr>".to_vec(),
         };
 
-        let res = Reader::handle_output_ok(&output);
-        let res = res.unwrap();
+        let res = Reader::handle_output_ok(&output).unwrap();
 
         assert_eq!(res, "<stdout>");
     }
@@ -165,8 +164,7 @@ mod tests {
             stderr: b"<stderr>".to_vec(),
         };
 
-        let res = Reader::handle_output_ok(&output);
-        let res = res.expect_err("should be an error");
+        let res = Reader::handle_output_ok(&output).unwrap_err();
 
         assert_eq!(
             res,
@@ -193,8 +191,7 @@ mod tests {
             stderr: b"".to_vec(), // Here.
         };
 
-        let res = Reader::handle_output_ok(&output);
-        let res = res.expect_err("should be an error");
+        let res = Reader::handle_output_ok(&output).unwrap_err();
 
         assert!(matches!(
             res.detail,
@@ -204,8 +201,7 @@ mod tests {
 
     #[test]
     fn error_with_command() {
-        let res = Reader::handle_output_err();
-        let res = res.expect_err("cannot be anything else than an error");
+        let res = Reader::handle_output_err().unwrap_err();
 
         assert_eq!(
             res,

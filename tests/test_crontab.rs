@@ -274,7 +274,7 @@ fn make_instance_error_reading_crontab() {
     mock_crontab("exit_non_zero");
 
     let crontab = make_instance();
-    let error = crontab.expect_err("should be an error");
+    let error = crontab.unwrap_err();
 
     assert_eq!(
         error,
@@ -294,7 +294,7 @@ fn make_instance_error_running_crontab_command() {
     env::set_var("PATH", "");
 
     let crontab = make_instance();
-    let error = crontab.expect_err("should be an error");
+    let error = crontab.unwrap_err();
 
     assert_eq!(
         error,
