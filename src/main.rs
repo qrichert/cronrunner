@@ -25,7 +25,7 @@ use cronrunner::crontab::{
     CronJob, JobDescription, JobSection, ReadError, ReadErrorDetail, RunResult, RunResultDetail,
 };
 
-use crate::cli::{args, ui};
+use crate::cli::{args, output, ui};
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> ExitCode {
@@ -35,7 +35,7 @@ fn main() -> ExitCode {
     };
 
     if config.help {
-        println!("{}", args::help_message());
+        output::Pager::page_or_print(&args::help_message());
         return ExitCode::SUCCESS;
     } else if config.version {
         println!("{}", args::version_message());
