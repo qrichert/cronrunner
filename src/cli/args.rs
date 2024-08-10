@@ -124,13 +124,13 @@ Extras:
 ",
         description = env!("CARGO_PKG_DESCRIPTION"),
         bin = env!("CARGO_BIN_NAME"),
-        comment = "\x1b[96m",
-        schedule = "\x1b[38;5;224m",
-        command = "\x1b[93m",
-        title = ui::TITLE,
-        highlight = ui::HIGHLIGHT,
-        attenuate = ui::ATTENUATE,
-        reset = ui::RESET
+        comment = ui::Color::maybe_color("\x1b[96m"),
+        schedule = ui::Color::maybe_color("\x1b[38;5;224m"),
+        command = ui::Color::maybe_color("\x1b[93m"),
+        title = ui::Color::maybe_color(ui::TITLE),
+        highlight = ui::Color::maybe_color(ui::HIGHLIGHT),
+        attenuate = ui::Color::maybe_color(ui::ATTENUATE),
+        reset = ui::Color::maybe_color(ui::RESET),
     )
 }
 
@@ -143,7 +143,7 @@ pub fn unexpected_argument_error_message(arg: &str) -> String {
         "\
 {error} unexpected argument '{arg}'.
 Try '{bin} -h' for help.",
-        error = ui::color_error("Error:"),
+        error = ui::Color::error("Error:"),
         bin = env!("CARGO_BIN_NAME"),
     )
 }

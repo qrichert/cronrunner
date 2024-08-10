@@ -14,30 +14,71 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::env;
+use std::sync::LazyLock;
+
+/// `true` if `NO_COLOR` is set and is non-empty.
+#[cfg(not(tarpaulin_include))]
+#[allow(unreachable_code)]
+pub static NO_COLOR: LazyLock<bool> = LazyLock::new(|| {
+    #[cfg(test)]
+    {
+        return false;
+    }
+    // Contrary to `env::var()`, `env::var_os()` does not require the
+    // value to be valid Unicode.
+    match env::var_os("NO_COLOR") {
+        Some(value) => !value.is_empty(),
+        None => false,
+    }
+});
+
 pub const ERROR: &str = "\x1b[0;91m";
 pub const HIGHLIGHT: &str = "\x1b[0;92m";
 pub const ATTENUATE: &str = "\x1b[0;90m";
 pub const TITLE: &str = "\x1b[1;4m";
 pub const RESET: &str = "\x1b[0m";
 
-#[must_use]
-pub fn color_error(string: &str) -> String {
-    format!("{ERROR}{string}{RESET}")
-}
+pub struct Color;
 
-#[must_use]
-pub fn color_highlight(string: &str) -> String {
-    format!("{HIGHLIGHT}{string}{RESET}")
-}
+impl Color {
+    #[must_use]
+    pub fn error(string: &str) -> String {
+        Self::color(ERROR, string)
+    }
 
-#[must_use]
-pub fn color_attenuate(string: &str) -> String {
-    format!("{ATTENUATE}{string}{RESET}")
-}
+    #[must_use]
+    pub fn highlight(string: &str) -> String {
+        Self::color(HIGHLIGHT, string)
+    }
 
-#[must_use]
-pub fn color_title(string: &str) -> String {
-    format!("{TITLE}{string}{RESET}")
+    #[must_use]
+    pub fn attenuate(string: &str) -> String {
+        Self::color(ATTENUATE, string)
+    }
+
+    #[must_use]
+    pub fn title(string: &str) -> String {
+        Self::color(TITLE, string)
+    }
+
+    #[must_use]
+    fn color(color: &str, string: &str) -> String {
+        if *NO_COLOR {
+            #[cfg(not(tarpaulin_include))] // Unreachable in tests.
+            return string.into();
+        }
+        format!("{color}{string}{RESET}")
+    }
+
+    #[must_use]
+    pub fn maybe_color(color: &str) -> &str {
+        if *NO_COLOR {
+            #[cfg(not(tarpaulin_include))] // Unreachable in tests.
+            return "";
+        }
+        color
+    }
 }
 
 #[cfg(test)]
@@ -47,7 +88,7 @@ mod tests {
     #[test]
     fn color_error_is_red() {
         assert_eq!(
-            color_error("this is marked as error"),
+            Color::error("this is marked as error"),
             "\x1b[0;91mthis is marked as error\x1b[0m"
         );
     }
@@ -55,7 +96,7 @@ mod tests {
     #[test]
     fn color_highlight_is_green() {
         assert_eq!(
-            color_highlight("this is highlighted"),
+            Color::highlight("this is highlighted"),
             "\x1b[0;92mthis is highlighted\x1b[0m"
         );
     }
@@ -63,7 +104,7 @@ mod tests {
     #[test]
     fn color_attenuate_is_grey() {
         assert_eq!(
-            color_attenuate("this is attenuated"),
+            Color::attenuate("this is attenuated"),
             "\x1b[0;90mthis is attenuated\x1b[0m"
         );
     }
@@ -71,7 +112,7 @@ mod tests {
     #[test]
     fn color_title_is_bold_underlined() {
         assert_eq!(
-            color_title("this is bold, and underlined"),
+            Color::title("this is bold, and underlined"),
             "\x1b[1;4mthis is bold, and underlined\x1b[0m"
         );
     }

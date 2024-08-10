@@ -73,7 +73,7 @@ fn main() -> ExitCode {
         return exit_from_invalid_job_selection().into();
     };
 
-    println!("{} {}", ui::color_highlight("$"), &job.command);
+    println!("{} {}", ui::Color::highlight("$"), &job.command);
 
     let res = if config.detach {
         crontab.run_detached(job)
@@ -89,7 +89,7 @@ fn exit_from_argument_error(arg: &str) -> u8 {
 }
 
 fn exit_from_crontab_read_error(error: &ReadError) -> u8 {
-    eprintln!("{}", ui::color_error(error.reason));
+    eprintln!("{}", ui::Color::error(error.reason));
 
     if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = &error.detail {
         if let Some(stderr) = stderr {
@@ -176,11 +176,11 @@ fn update_section_if_needed<'a>(
 }
 
 fn format_job_section(section: &JobSection) -> String {
-    format!("\n{}\n", ui::color_title(&section.to_string()))
+    format!("\n{}\n", ui::Color::title(&section.to_string()))
 }
 
 fn format_job_uid(uid: u32, max_uid_width: usize) -> String {
-    ui::color_highlight(&format!("{uid:>max_uid_width$}."))
+    ui::Color::highlight(&format!("{uid:>max_uid_width$}."))
 }
 
 fn format_job_description(description: &Option<JobDescription>) -> String {
@@ -192,12 +192,12 @@ fn format_job_description(description: &Option<JobDescription>) -> String {
 }
 
 fn format_job_schedule(schedule: &str) -> String {
-    ui::color_attenuate(schedule)
+    ui::Color::attenuate(schedule)
 }
 
 fn format_job_command(command: &str, has_description: bool) -> String {
     if has_description {
-        ui::color_attenuate(command)
+        ui::Color::attenuate(command)
     } else {
         String::from(command)
     }
@@ -241,7 +241,7 @@ fn parse_user_job_selection(job_selected: &str) -> Result<Option<u32>, ()> {
 }
 
 fn exit_from_invalid_job_selection() -> u8 {
-    eprintln!("{}", ui::color_error("Invalid job selection."));
+    eprintln!("{}", ui::Color::error("Invalid job selection."));
     1
 }
 
@@ -252,7 +252,7 @@ fn exit_from_run_result(result: RunResult) -> u8 {
 
     match result.detail {
         RunResultDetail::DidNotRun { reason } => {
-            eprintln!("{}", ui::color_error(&reason));
+            eprintln!("{}", ui::Color::error(&reason));
             1
         }
         RunResultDetail::DidRun { exit_code: None } => 1,
