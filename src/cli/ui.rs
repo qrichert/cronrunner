@@ -62,6 +62,15 @@ impl Color {
         Self::color(TITLE, string)
     }
 
+    /// Color string of text.
+    ///
+    /// The string gets colored in a standalone way, meaning  the reset
+    /// code is included, so anything appended to the end of the string
+    /// will not be colored.
+    ///
+    /// This function takes `NO_COLOR` into account. In no-color mode,
+    /// the returned string will be equal to the input string, no color
+    /// gets added.
     #[must_use]
     fn color(color: &str, string: &str) -> String {
         if *NO_COLOR {
@@ -71,6 +80,31 @@ impl Color {
         format!("{color}{string}{RESET}")
     }
 
+    /// Return input color, or nothing in no-color mode.
+    ///
+    /// This makes it easy to support no-color mode.
+    ///
+    /// Wrap color code strings in this function. In regular mode, it
+    /// will return the string as-is. But it no-color mode, it will
+    /// return an empty string.
+    ///
+    /// This can be used if you don't want to use the pre-defined
+    /// coloring functions. It is lower level, but nicer than manually
+    /// checking the [`NO_COLOR`] static variable.
+    ///
+    /// ```ignore
+    /// // In regular colored-mode.
+    /// assert_eq(
+    ///     Color::maybe_color("\x1b[96m"),
+    ///     "\x1b[96m",
+    /// );
+    ///
+    /// // In no-color mode.
+    /// assert_eq(
+    ///     Color::maybe_color("\x1b[96m"),
+    ///     "",
+    /// )
+    /// ```
     #[must_use]
     pub fn maybe_color(color: &str) -> &str {
         if *NO_COLOR {
