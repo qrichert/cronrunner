@@ -1,7 +1,7 @@
-use std::{env, fs, path::Path};
+use std::{env, fs, path::PathBuf};
 
-const FIXTURES_DIR: &str = "tests/fixtures/";
-const MOCK_BIN: &str = "target/mock_bin";
+const FIXTURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/");
+const MOCK_BIN_DIR: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/mock_bin/");
 
 /// "Monkey-patch" the crontab executable.
 ///
@@ -15,8 +15,8 @@ const MOCK_BIN: &str = "target/mock_bin";
 /// This enables us to test virtually anything, without touching the
 /// real crontab.
 pub fn mock_crontab(file: &str) {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURES_DIR);
-    let bin_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(MOCK_BIN);
+    let fixtures_dir = PathBuf::from(FIXTURES_DIR);
+    let bin_dir = PathBuf::from(MOCK_BIN_DIR);
 
     let fixture = fixtures_dir.join(file).with_extension("sh");
     let test_mock = bin_dir.join("crontab");
@@ -41,8 +41,8 @@ pub fn mock_crontab(file: &str) {
 /// This works exactly like [`mock_crontab()`], but in this case it sets
 /// up a fake shell.
 pub fn mock_shell(file: &str) {
-    let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(FIXTURES_DIR);
-    let bin_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(MOCK_BIN);
+    let fixtures_dir = PathBuf::from(FIXTURES_DIR);
+    let bin_dir = PathBuf::from(MOCK_BIN_DIR);
 
     let fixture = fixtures_dir.join(file).with_extension("sh");
     let test_mock = bin_dir.join("mock_shell");
@@ -65,8 +65,8 @@ pub fn mock_shell(file: &str) {
 /// Read output file created by a mock executable (crontab or shell).
 pub fn read_output_file(file: &str) -> String {
     // Scripts create output files in the same directory as they're in
-    // (i.e., in `target/mock_bin/`).
-    let bin_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(MOCK_BIN);
+    // (i.e., in `target/tmp/mock_bin/`).
+    let bin_dir = PathBuf::from(MOCK_BIN_DIR);
 
     fs::read_to_string(bin_dir.join(file).with_extension("txt"))
         .expect("if file doesn't exist, the test failed")
