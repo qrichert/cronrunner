@@ -18,41 +18,41 @@ mod cli;
 
 use std::env;
 use std::io::{self, IsTerminal, Write};
-use std::process::ExitCode;
 
 use cronrunner::crontab::{
     self, CronJob, JobDescription, JobSection, ReadError, ReadErrorDetail, RunResult,
     RunResultDetail,
 };
 
+use crate::cli::exit_status::ExitStatus;
 use crate::cli::{args, output, ui};
 
 #[cfg(not(tarpaulin_include))]
-fn main() -> ExitCode {
+fn main() -> ExitStatus {
     let config = match args::Config::make_from_args(env::args()) {
         Ok(config) => config,
-        Err(arg) => return exit_from_argument_error(&arg).into(),
+        Err(arg) => return exit_from_argument_error(&arg),
     };
 
     if config.help {
         output::Pager::page_or_print(&args::help_message());
-        return ExitCode::SUCCESS;
+        return ExitStatus::Success;
     } else if config.version {
         println!("{}", args::version_message());
-        return ExitCode::SUCCESS;
+        return ExitStatus::Success;
     }
 
     let crontab = match crontab::make_instance() {
         Ok(crontab) => crontab,
-        Err(error) => return exit_from_crontab_read_error(&error).into(),
+        Err(error) => return exit_from_crontab_read_error(&error),
     };
     if !crontab.has_runnable_jobs() {
-        return exit_from_no_runnable_jobs().into();
+        return exit_from_no_runnable_jobs();
     }
 
     if config.list_only {
         print_job_selection_menu(&crontab.jobs());
-        return ExitCode::SUCCESS;
+        return ExitStatus::Success;
     }
 
     let job_selected = if let Some(job) = config.job {
@@ -63,19 +63,19 @@ fn main() -> ExitCode {
         print_job_selection_menu(&crontab.jobs());
 
         match get_user_selection() {
-            Err(()) => return exit_from_invalid_job_selection().into(),
-            Ok(None) => return ExitCode::SUCCESS,
+            Err(()) => return exit_from_invalid_job_selection(),
+            Ok(None) => return ExitStatus::Success,
             Ok(Some(job)) => job,
         }
     };
 
     if job_selected == 42 && crontab.jobs().len() < 42 {
         println!("What was the question again?");
-        return ExitCode::SUCCESS;
+        return ExitStatus::Success;
     }
 
     let Some(job) = crontab.get_job_from_uid(job_selected) else {
-        return exit_from_invalid_job_selection().into();
+        return exit_from_invalid_job_selection();
     };
 
     println!("{} {}", ui::Color::highlight("$"), &job.command);
@@ -85,15 +85,15 @@ fn main() -> ExitCode {
     } else {
         crontab.run(job)
     };
-    exit_from_run_result(res).into()
+    exit_from_run_result(res)
 }
 
-fn exit_from_argument_error(arg: &str) -> u8 {
+fn exit_from_argument_error(arg: &str) -> ExitStatus {
     eprintln!("{}", args::unexpected_argument_error_message(arg));
-    2
+    ExitStatus::ArgsError
 }
 
-fn exit_from_crontab_read_error(error: &ReadError) -> u8 {
+fn exit_from_crontab_read_error(error: &ReadError) -> ExitStatus {
     eprintln!("{}", ui::Color::error(error.reason));
 
     if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = &error.detail {
@@ -101,20 +101,20 @@ fn exit_from_crontab_read_error(error: &ReadError) -> u8 {
             eprintln!("{}", strip_terminating_newline(stderr));
         }
         if let Some(exit_code) = exit_code {
-            return convert_i32_exit_code_to_u8_exit_code(*exit_code);
+            return (*exit_code).into();
         }
     }
 
-    1
+    ExitStatus::Failure
 }
 
 fn strip_terminating_newline(text: &str) -> &str {
     text.strip_suffix('\n').unwrap_or(text)
 }
 
-fn exit_from_no_runnable_jobs() -> u8 {
+fn exit_from_no_runnable_jobs() -> ExitStatus {
     println!("No jobs to run.");
-    0
+    ExitStatus::Success
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -245,38 +245,30 @@ fn parse_user_job_selection(job_selected: &str) -> Result<Option<u32>, ()> {
     }
 }
 
-fn exit_from_invalid_job_selection() -> u8 {
+fn exit_from_invalid_job_selection() -> ExitStatus {
     eprintln!("{}", ui::Color::error("Invalid job selection."));
-    1
+    ExitStatus::Failure
 }
 
-fn exit_from_run_result(result: RunResult) -> u8 {
+fn exit_from_run_result(result: RunResult) -> ExitStatus {
     if result.was_successful {
-        return 0;
+        return ExitStatus::Success;
     }
 
     match result.detail {
         RunResultDetail::DidNotRun { reason } => {
             eprintln!("{}", ui::Color::error(&reason));
-            1
+            ExitStatus::Failure
         }
-        RunResultDetail::DidRun { exit_code: None } => 1,
+        RunResultDetail::DidRun { exit_code: None } => ExitStatus::Failure,
         RunResultDetail::DidRun {
             exit_code: Some(exit_code),
-        } => convert_i32_exit_code_to_u8_exit_code(exit_code),
+        } => exit_code.into(),
         RunResultDetail::IsRunning { pid } => {
             println!("{pid}");
-            0
+            ExitStatus::Success
         }
     }
-}
-
-fn convert_i32_exit_code_to_u8_exit_code(code: i32) -> u8 {
-    // error_code in [0 ; 255]
-    if code >= i32::from(u8::MIN) && code <= i32::from(u8::MAX) {
-        return u8::try_from(code).expect("bounds have been checked already");
-    }
-    1 // Default to generic exit 1.
 }
 
 #[cfg(test)]
@@ -289,7 +281,7 @@ mod tests {
 
         let exit_code = exit_from_argument_error(arg);
 
-        assert_eq!(exit_code, 2);
+        assert_eq!(exit_code, ExitStatus::ArgsError);
     }
 
     #[test]
@@ -304,7 +296,7 @@ mod tests {
 
         let exit_code = exit_from_crontab_read_error(&error);
 
-        assert_eq!(exit_code, 2);
+        assert_eq!(exit_code, ExitStatus::ArgsError);
     }
 
     #[test]
@@ -319,7 +311,7 @@ mod tests {
 
         let exit_code = exit_from_crontab_read_error(&error);
 
-        assert_eq!(exit_code, 1);
+        assert_eq!(exit_code, ExitStatus::Failure);
     }
 
     #[test]
@@ -331,7 +323,7 @@ mod tests {
 
         let exit_code = exit_from_crontab_read_error(&error);
 
-        assert_eq!(exit_code, 1);
+        assert_eq!(exit_code, ExitStatus::Failure);
     }
 
     #[test]
@@ -359,7 +351,7 @@ mod tests {
     fn exit_from_no_runnable_jobs_is_success() {
         let exit_code = exit_from_no_runnable_jobs();
 
-        assert_eq!(exit_code, 0);
+        assert_eq!(exit_code, ExitStatus::Success);
     }
 
     #[test]
@@ -526,7 +518,7 @@ mod tests {
     fn exit_from_invalid_job_selection_is_error() {
         let exit_code = exit_from_invalid_job_selection();
 
-        assert_eq!(exit_code, 1);
+        assert_eq!(exit_code, ExitStatus::Failure);
     }
 
     #[test]
@@ -538,7 +530,7 @@ mod tests {
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 0);
+        assert_eq!(exit_code, ExitStatus::Success);
     }
 
     #[test]
@@ -552,7 +544,7 @@ mod tests {
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 1);
+        assert_eq!(exit_code, ExitStatus::Failure);
     }
 
     #[test]
@@ -564,7 +556,7 @@ mod tests {
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 1);
+        assert_eq!(exit_code, ExitStatus::Failure);
     }
 
     #[test]
@@ -578,7 +570,7 @@ mod tests {
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 42);
+        assert_eq!(exit_code, ExitStatus::Error(42));
     }
 
     #[test]
@@ -590,24 +582,6 @@ mod tests {
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, 0);
-    }
-
-    #[test]
-    fn convert_i32_to_u8_exit_code() {
-        // Test boundaries and middle value.
-        assert_eq!(convert_i32_exit_code_to_u8_exit_code(0i32), 0u8);
-        assert_eq!(convert_i32_exit_code_to_u8_exit_code(1i32), 1u8);
-        assert_eq!(convert_i32_exit_code_to_u8_exit_code(255i32), 255u8);
-    }
-
-    #[test]
-    fn convert_i32_to_u8_exit_code_out_of_lower_bound() {
-        assert_eq!(convert_i32_exit_code_to_u8_exit_code(-1i32), 1u8);
-    }
-
-    #[test]
-    fn convert_i32_to_u8_exit_code_out_of_upper_bound() {
-        assert_eq!(convert_i32_exit_code_to_u8_exit_code(256i32), 1u8);
+        assert_eq!(exit_code, ExitStatus::Success);
     }
 }
