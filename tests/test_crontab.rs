@@ -1,9 +1,11 @@
 mod utils;
 
-use crate::utils::{mock_crontab, mock_shell, read_output_file};
+use std::env;
+
 use cronrunner::crontab::tokens::{Comment, CommentKind, CronJob, Token, Variable};
 use cronrunner::crontab::{make_instance, ReadError, ReadErrorDetail, Reader, RunResultDetail};
-use std::env;
+
+use crate::utils::{mock_crontab, mock_shell, read_output_file};
 
 // Warning: These tests MUST be run sequentially. Running them in
 // parallel threads may cause conflicts with environment variables,
@@ -291,7 +293,9 @@ fn make_instance_error_reading_crontab() {
 #[test]
 fn make_instance_error_running_crontab_command() {
     // Make `crontab` executable inaccessible.
-    env::set_var("PATH", "");
+    unsafe {
+        env::set_var("PATH", "");
+    }
 
     let crontab = make_instance();
     let error = crontab.unwrap_err();

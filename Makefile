@@ -57,6 +57,7 @@ check: ## Most stringent checks (includes checks still in development)
 	@cargo check
 	@cargo clippy --all-targets --all-features -- -D warnings -W clippy::all -W clippy::cargo -W clippy::complexity -W clippy::correctness -W clippy::nursery -W clippy::pedantic -W clippy::perf -W clippy::style -W clippy::suspicious -A clippy::missing-const-for-fn -A clippy::option_if_let_else
 	@make test
+	@make coverage-pct
 
 .PHONY: t
 t: test

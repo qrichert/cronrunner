@@ -17,12 +17,12 @@
 mod cli;
 
 use std::env;
-use std::io::{IsTerminal, Write};
+use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 
-use cronrunner::crontab;
 use cronrunner::crontab::{
-    CronJob, JobDescription, JobSection, ReadError, ReadErrorDetail, RunResult, RunResultDetail,
+    self, CronJob, JobDescription, JobSection, ReadError, ReadErrorDetail, RunResult,
+    RunResultDetail,
 };
 
 use crate::cli::{args, output, ui};
@@ -116,11 +116,11 @@ fn exit_from_no_runnable_jobs() -> u8 {
 fn read_job_selection_from_stdin() -> Option<u32> {
     // If the descriptor/handle refers to a terminal/tty, there is
     // nothing in stdin to be consumed yet.
-    if std::io::stdin().is_terminal() {
+    if io::stdin().is_terminal() {
         return None;
     }
     let mut job_selected = String::new();
-    if std::io::stdin().read_line(&mut job_selected).is_err() {
+    if io::stdin().read_line(&mut job_selected).is_err() {
         return None;
     }
     match parse_user_job_selection(&job_selected) {
@@ -216,10 +216,10 @@ fn get_user_selection() -> Result<Option<u32>, ()> {
     print!(">>> Select a job to run: ");
     // Flush manually in case `stdout` is line-buffered (common case),
     // else the previous print won't be displayed immediately (no `\n`).
-    std::io::stdout().flush().unwrap_or_default();
+    io::stdout().flush().unwrap_or_default();
 
     let mut job_selected = String::new();
-    std::io::stdin()
+    io::stdin()
         .read_line(&mut job_selected)
         .expect("cannot read user input");
 

@@ -1,4 +1,6 @@
-use std::{env, fs, path::PathBuf};
+use std::env;
+use std::fs;
+use std::path::PathBuf;
 
 const FIXTURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/");
 const MOCK_BIN_DIR: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/mock_bin/");
@@ -33,7 +35,9 @@ pub fn mock_crontab(file: &str) {
         fixture.display()
     );
 
-    env::set_var("PATH", format!("{}:/bin:/usr/bin/", bin_dir.display()));
+    unsafe {
+        env::set_var("PATH", format!("{}:/bin:/usr/bin/", bin_dir.display()));
+    }
 }
 
 /// "Monkey-patch" the crontab executable.
@@ -59,7 +63,9 @@ pub fn mock_shell(file: &str) {
         fixture.display()
     );
 
-    env::set_var("PATH", format!("{}:/bin:/usr/bin/", bin_dir.display()));
+    unsafe {
+        env::set_var("PATH", format!("{}:/bin:/usr/bin/", bin_dir.display()));
+    }
 }
 
 /// Read output file created by a mock executable (crontab or shell).

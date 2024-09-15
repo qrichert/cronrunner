@@ -14,10 +14,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::str::Chars;
+
 use super::tokens::{
     Comment, CommentKind, CronJob, JobDescription, JobSection, Token, Unknown, Variable,
 };
-use std::str::Chars;
 
 /// Internal state for the [`Parser`].
 ///

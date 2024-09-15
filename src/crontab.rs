@@ -646,7 +646,9 @@ mod tests {
 
     #[test]
     fn working_directory_is_home_directory() {
-        env::set_var("HOME", "/home/<test>");
+        unsafe {
+            env::set_var("HOME", "/home/<test>");
+        }
 
         let home_directory = Crontab::get_home_directory().unwrap();
 
@@ -866,7 +868,9 @@ mod tests {
 
     #[test]
     fn run_cron_with_default_home() {
-        env::set_var("HOME", "/home/<default>");
+        unsafe {
+            env::set_var("HOME", "/home/<default>");
+        }
 
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
@@ -884,7 +888,9 @@ mod tests {
 
     #[test]
     fn run_cron_with_different_home() {
-        env::set_var("HOME", "/home/<default>");
+        unsafe {
+            env::set_var("HOME", "/home/<default>");
+        }
 
         let crontab = Crontab::new(vec![
             Token::Variable(Variable {
@@ -933,7 +939,9 @@ mod tests {
 
     #[test]
     fn get_home_directory_error() {
-        env::remove_var("HOME");
+        unsafe {
+            env::remove_var("HOME");
+        }
 
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
@@ -949,7 +957,9 @@ mod tests {
         assert_eq!(error, "Could not read Home directory from environment.");
 
         // If we don't re-create it, other tests will fail.
-        env::set_var("HOME", "/home/<test>");
+        unsafe {
+            env::set_var("HOME", "/home/<test>");
+        }
     }
 
     #[test]
