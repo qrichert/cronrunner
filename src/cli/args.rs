@@ -16,10 +16,12 @@
 
 use super::ui;
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Eq, PartialEq)]
 pub struct Config {
     pub help: bool,
     pub version: bool,
+    pub list_only: bool,
     pub detach: bool,
     pub job: Option<u32>,
 }
@@ -29,6 +31,7 @@ impl Config {
         Self {
             help: false,
             version: false,
+            list_only: false,
             detach: false,
             job: None,
         }
@@ -46,6 +49,11 @@ impl Config {
 
             if arg == "-v" || arg == "--version" {
                 config.version = true;
+                break;
+            }
+
+            if arg == "-l" || arg == "--list-only" {
+                config.list_only = true;
                 break;
             }
 
@@ -80,6 +88,7 @@ Usage: {bin} [OPTIONS] [ID]
 Options:
   -h, --help           Show this message and exit.
   -v, --version        Show the version and exit.
+  -l, --list-only      List available jobs and exit.
   -d, --detach         Run job in the background.
 
 Examples:
@@ -290,6 +299,46 @@ mod tests {
         dbg!(&message);
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn argument_list_only() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--list-only"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(config.list_only);
+    }
+
+    #[test]
+    fn argument_list_only_shorthand() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("-l"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(config.list_only);
+    }
+
+    #[test]
+    fn argument_list_only_stops_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--list-only"),
+            String::from("--unknown"),
+        ]
+        .into_iter();
+
+        let config = Config::make_from_args(args).unwrap();
+
+        assert!(config.list_only);
     }
 
     #[test]

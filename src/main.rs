@@ -50,6 +50,11 @@ fn main() -> ExitCode {
         return exit_from_no_runnable_jobs().into();
     }
 
+    if config.list_only {
+        print_job_selection_menu(&crontab.jobs());
+        return ExitCode::SUCCESS;
+    }
+
     let job_selected = if let Some(job) = config.job {
         job
     } else if let Some(job) = read_job_selection_from_stdin() {
@@ -216,7 +221,7 @@ fn get_user_selection() -> Result<Option<u32>, ()> {
     print!(">>> Select a job to run: ");
     // Flush manually in case `stdout` is line-buffered (common case),
     // else the previous print won't be displayed immediately (no `\n`).
-    io::stdout().flush().unwrap_or_default();
+    _ = io::stdout().flush();
 
     let mut job_selected = String::new();
     io::stdin()
