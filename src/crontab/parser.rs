@@ -53,7 +53,8 @@ impl Parser {
     /// # Examples
     ///
     /// ```rust
-    /// use cronrunner::crontab::{Parser, Token, CronJob};
+    /// use cronrunner::parser::Parser;
+    /// use cronrunner::tokens::{Token, CronJob};
     ///
     /// let tokens: Vec<Token> = Parser::parse("@hourly echo ':)'");
     ///

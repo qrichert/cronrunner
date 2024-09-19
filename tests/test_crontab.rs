@@ -2,8 +2,9 @@ mod utils;
 
 use std::env;
 
-use cronrunner::crontab::tokens::{Comment, CommentKind, CronJob, Token, Variable};
-use cronrunner::crontab::{make_instance, ReadError, ReadErrorDetail, Reader, RunResultDetail};
+use cronrunner::crontab::{make_instance, RunResultDetail};
+use cronrunner::reader::{ReadError, ReadErrorDetail, Reader};
+use cronrunner::tokens::{Comment, CommentKind, CronJob, Token, Variable};
 
 use crate::utils::{mock_crontab, mock_shell, read_output_file};
 

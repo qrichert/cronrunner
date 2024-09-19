@@ -69,7 +69,7 @@ impl Reader {
     /// # Examples
     ///
     /// ```rust
-    /// use cronrunner::crontab::Reader;
+    /// use cronrunner::reader::Reader;
     ///
     /// let crontab: String = match Reader::read() {
     ///     Ok(crontab) => crontab, // Output of `crontab -l` as string.

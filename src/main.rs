@@ -19,10 +19,9 @@ mod cli;
 use std::env;
 use std::io::{self, IsTerminal, Write};
 
-use cronrunner::crontab::{
-    self, CronJob, JobDescription, JobSection, ReadError, ReadErrorDetail, RunResult,
-    RunResultDetail,
-};
+use cronrunner::crontab::{self, RunResult, RunResultDetail};
+use cronrunner::reader::{ReadError, ReadErrorDetail};
+use cronrunner::tokens::{CronJob, JobDescription, JobSection};
 
 use crate::cli::exit_status::ExitStatus;
 use crate::cli::{args, output, ui};

@@ -22,9 +22,9 @@ use std::collections::HashMap;
 use std::env;
 use std::process::{Command, Stdio};
 
-pub use self::parser::Parser;
-pub use self::reader::{ReadError, ReadErrorDetail, Reader};
-pub use self::tokens::{CronJob, JobDescription, JobSection, Token};
+use self::parser::Parser;
+use self::reader::{ReadError, Reader};
+use self::tokens::{CronJob, Token};
 
 /// Default shell used if not overridden by a variable in the crontab.
 const DEFAULT_SHELL: &str = "/bin/sh";
@@ -139,7 +139,8 @@ impl Crontab {
     /// # Examples
     ///
     /// ```rust
-    /// # use cronrunner::crontab::{CronJob, Crontab, RunResult, Token};
+    /// # use cronrunner::crontab::{Crontab, RunResult};
+    /// # use cronrunner::tokens::{CronJob, Token};
     /// #
     /// # let crontab: Crontab = Crontab::new(vec![Token::CronJob(CronJob {
     /// #     uid: 1,
@@ -209,7 +210,8 @@ impl Crontab {
     /// # Examples
     ///
     /// ```rust
-    /// # use cronrunner::crontab::{CronJob, Crontab, RunResult, RunResultDetail, Token};
+    /// # use cronrunner::crontab::{Crontab, RunResult, RunResultDetail};
+    /// # use cronrunner::tokens::{CronJob, Token};
     /// #
     /// # let crontab: Crontab = Crontab::new(vec![Token::CronJob(CronJob {
     /// #     uid: 1,
@@ -383,7 +385,7 @@ pub fn make_instance() -> Result<Crontab, ReadError> {
 
 #[cfg(test)]
 mod tests {
-    use super::tokens::{Comment, CommentKind, Variable};
+    use self::tokens::{Comment, CommentKind, JobDescription, Variable};
     use super::*;
 
     // Warning: These tests MUST be run sequentially. Running them in
