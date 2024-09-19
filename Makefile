@@ -31,13 +31,13 @@ clean: ## Clean project files
 r: run
 .PHONY: run
 run: ## Build and run program
-	@cargo run --quiet
+	@cargo run --quiet --all-features
 
 .PHONY: b
 b: build
 .PHONY: build
 build: ## Make optimized release build
-	@cargo build --release
+	@cargo build --release --all-features
 
 .PHONY: buildlinux
 buildlinux: ## Build linux executable through Docker
@@ -63,7 +63,7 @@ check: ## Most stringent checks (includes checks still in development)
 t: test
 .PHONY: test
 test: ## Run unit tests
-	@cargo test -- --test-threads 1
+	@cargo test --all-features -- --test-threads 1
 
 .PHONY: doc
 doc: ## Build documentation
@@ -73,12 +73,14 @@ doc: ## Build documentation
 c: coverage
 .PHONY: coverage
 coverage: ## Unit tests coverage report
-	@cargo tarpaulin --engine Llvm --timeout 120 --out Html --output-dir target/
+	@cargo tarpaulin --engine Llvm --timeout 120 --out Html --output-dir target/ --all-features
 	@open target/tarpaulin-report.html || xdg-open target/tarpaulin-report.html || :
 
+.PHONY: cpc
+cpc: coverage-pct
 .PHONY: coverage-pct
 coverage-pct: ## Ensure code coverage of 100%
-	@coverage=$$(cargo tarpaulin --engine Llvm --out Stdout 2>&1); \
+	@coverage=$$(cargo tarpaulin --engine Llvm --out Stdout --all-features 2>&1); \
 		percent_covered=$$(echo "$$coverage" | grep -o '^[0-9]\+\.[0-9]\+% coverage' | cut -d'%' -f1); \
 		echo $$percent_covered; \
 		[ $$(echo "$$percent_covered == 100" | bc -l) -eq 0 ] && exit 1; \

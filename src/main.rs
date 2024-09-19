@@ -24,7 +24,8 @@ use cronrunner::reader::{ReadError, ReadErrorDetail};
 use cronrunner::tokens::{CronJob, JobDescription, JobSection};
 
 use crate::cli::exit_status::ExitStatus;
-use crate::cli::{args, output, ui};
+use crate::cli::output::Pager;
+use crate::cli::{args, ui};
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> ExitStatus {
@@ -34,7 +35,7 @@ fn main() -> ExitStatus {
     };
 
     if config.help {
-        output::Pager::page_or_print(&args::help_message());
+        Pager::page_or_print(&args::help_message());
         return ExitStatus::Success;
     } else if config.version {
         println!("{}", args::version_message());
