@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::Path;
 
 const FIXTURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/");
 const MOCK_BIN_DIR: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/mock_bin/");
@@ -17,14 +17,14 @@ const MOCK_BIN_DIR: &str = concat!(env!("CARGO_TARGET_TMPDIR"), "/mock_bin/");
 /// This enables us to test virtually anything, without touching the
 /// real crontab.
 pub fn mock_crontab(file: &str) {
-    let fixtures_dir = PathBuf::from(FIXTURES_DIR);
-    let bin_dir = PathBuf::from(MOCK_BIN_DIR);
+    let fixtures_dir = Path::new(FIXTURES_DIR);
+    let bin_dir = Path::new(MOCK_BIN_DIR);
 
     let fixture = fixtures_dir.join(file).with_extension("sh");
     let test_mock = bin_dir.join("crontab");
 
     assert!(
-        fs::create_dir_all(&bin_dir).is_ok(),
+        fs::create_dir_all(bin_dir).is_ok(),
         "Error creating mock bin directory: '{}'.",
         bin_dir.display()
     );
@@ -45,14 +45,14 @@ pub fn mock_crontab(file: &str) {
 /// This works exactly like [`mock_crontab()`], but in this case it sets
 /// up a fake shell.
 pub fn mock_shell(file: &str) {
-    let fixtures_dir = PathBuf::from(FIXTURES_DIR);
-    let bin_dir = PathBuf::from(MOCK_BIN_DIR);
+    let fixtures_dir = Path::new(FIXTURES_DIR);
+    let bin_dir = Path::new(MOCK_BIN_DIR);
 
     let fixture = fixtures_dir.join(file).with_extension("sh");
     let test_mock = bin_dir.join("mock_shell");
 
     assert!(
-        fs::create_dir_all(&bin_dir).is_ok(),
+        fs::create_dir_all(bin_dir).is_ok(),
         "Error creating mock bin directory: '{}'.",
         bin_dir.display()
     );
@@ -72,7 +72,7 @@ pub fn mock_shell(file: &str) {
 pub fn read_output_file(file: &str) -> String {
     // Scripts create output files in the same directory as they're in
     // (i.e., in `target/tmp/mock_bin/`).
-    let bin_dir = PathBuf::from(MOCK_BIN_DIR);
+    let bin_dir = Path::new(MOCK_BIN_DIR);
 
     fs::read_to_string(bin_dir.join(file).with_extension("txt"))
         .expect("if file doesn't exist, the test failed")

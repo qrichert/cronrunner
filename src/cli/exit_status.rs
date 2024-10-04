@@ -1,3 +1,19 @@
+// cronrunner — Run cron jobs manually.
+// Copyright (C) 2024  Quentin Richert
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 use std::process::{ExitCode, Termination};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -5,7 +21,7 @@ pub enum ExitStatus {
     Success,
     Failure,
     ArgsError,
-    Error(u8),
+    Code(u8),
 }
 
 impl From<u8> for ExitStatus {
@@ -14,7 +30,7 @@ impl From<u8> for ExitStatus {
             0 => Self::Success,
             1 => Self::Failure,
             2 => Self::ArgsError,
-            code => Self::Error(code),
+            code => Self::Code(code),
         }
     }
 }
@@ -30,7 +46,7 @@ impl From<i32> for ExitStatus {
     }
 }
 
-// `ExitCode` is not `PartialEq`
+// `ExitCode` is not `PartialEq`.
 #[cfg(not(tarpaulin_include))]
 impl Termination for ExitStatus {
     fn report(self) -> ExitCode {
@@ -38,7 +54,7 @@ impl Termination for ExitStatus {
             Self::Success => ExitCode::SUCCESS,
             Self::Failure => ExitCode::FAILURE,
             Self::ArgsError => ExitCode::from(2),
-            Self::Error(code) => ExitCode::from(code),
+            Self::Code(code) => ExitCode::from(code),
         }
     }
 }
@@ -53,7 +69,7 @@ mod tests {
         assert_eq!(ExitStatus::from(0i32), ExitStatus::Success);
         assert_eq!(ExitStatus::from(1i32), ExitStatus::Failure);
         assert_eq!(ExitStatus::from(2i32), ExitStatus::ArgsError);
-        assert_eq!(ExitStatus::from(255i32), ExitStatus::Error(255u8));
+        assert_eq!(ExitStatus::from(255i32), ExitStatus::Code(255u8));
     }
 
     #[test]

@@ -17,7 +17,7 @@
 use super::ui;
 
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct Config {
     pub help: bool,
     pub version: bool,
@@ -27,20 +27,9 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Self {
-        Self {
-            help: false,
-            version: false,
-            list_only: false,
-            detach: false,
-            job: None,
-        }
-    }
+    pub fn build_from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
+        let mut config = Self::default();
 
-    pub fn make_from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
-        let mut config = Self::new();
-
-        #[allow(clippy::never_loop)]
         for arg in args.skip(1) {
             if arg == "-h" || arg == "--help" {
                 config.help = true;
@@ -160,23 +149,38 @@ Try '{bin} -h' for help.",
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::iter;
+
+    #[test]
+    fn default_config() {
+        assert_eq!(
+            Config::default(),
+            Config {
+                help: false,
+                version: false,
+                list_only: false,
+                detach: false,
+                job: None,
+            }
+        );
+    }
 
     #[test]
     fn no_arguments_because_first_is_skipped() {
-        let args = std::iter::once(String::from("/usr/local/bin/cronrunner"));
+        let args = iter::once(String::from("/usr/local/bin/cronrunner"));
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
-        assert_eq!(config, Config::new());
+        assert_eq!(config, Config::default());
     }
 
     #[test]
     fn no_arguments_not_even_executable_path() {
-        let args = std::iter::empty();
+        let args = iter::empty();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
-        assert_eq!(config, Config::new());
+        assert_eq!(config, Config::default());
     }
 
     #[test]
@@ -187,7 +191,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).err().unwrap();
+        let config = Config::build_from_args(args).unwrap_err();
 
         assert_eq!(config, "--unknown");
     }
@@ -197,6 +201,7 @@ mod tests {
         let message = unexpected_argument_error_message("--unexpected");
 
         dbg!(&message);
+        assert!(message.contains("Error:"));
         assert!(message.contains("--unexpected"));
         assert!(message.contains("-h"));
     }
@@ -209,7 +214,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.help);
     }
@@ -222,7 +227,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.help);
     }
@@ -236,7 +241,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.help);
     }
@@ -260,7 +265,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.version);
     }
@@ -273,7 +278,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.version);
     }
@@ -287,7 +292,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.version);
     }
@@ -309,7 +314,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.list_only);
     }
@@ -322,7 +327,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.list_only);
     }
@@ -336,7 +341,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.list_only);
     }
@@ -349,7 +354,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.detach);
     }
@@ -362,7 +367,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.detach);
     }
@@ -376,7 +381,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(config.detach);
         assert!(matches!(config.job, Some(42)));
@@ -390,7 +395,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(matches!(config.job, Some(42)));
     }
@@ -404,7 +409,7 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::make_from_args(args).unwrap();
+        let config = Config::build_from_args(args).unwrap();
 
         assert!(matches!(config.job, Some(42)));
         assert!(config.version);

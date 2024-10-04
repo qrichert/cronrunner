@@ -29,7 +29,7 @@ use crate::cli::{args, ui};
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> ExitStatus {
-    let config = match args::Config::make_from_args(env::args()) {
+    let config = match args::Config::build_from_args(env::args()) {
         Ok(config) => config,
         Err(arg) => return exit_from_argument_error(&arg),
     };
@@ -570,7 +570,7 @@ mod tests {
 
         let exit_code = exit_from_run_result(result);
 
-        assert_eq!(exit_code, ExitStatus::Error(42));
+        assert_eq!(exit_code, ExitStatus::Code(42));
     }
 
     #[test]
