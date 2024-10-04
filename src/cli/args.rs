@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use super::job::Job;
 use super::ui;
 
 #[allow(clippy::struct_excessive_bools)]
@@ -22,8 +23,9 @@ pub struct Config {
     pub help: bool,
     pub version: bool,
     pub list_only: bool,
+    pub safe: bool,
     pub detach: bool,
-    pub job: Option<usize>,
+    pub job: Option<Job>,
 }
 
 impl Config {
@@ -43,7 +45,12 @@ impl Config {
 
             if arg == "-l" || arg == "--list-only" {
                 config.list_only = true;
-                break;
+                continue;
+            }
+
+            if arg == "-s" || arg == "--safe" {
+                config.safe = true;
+                continue;
             }
 
             if arg == "-d" || arg == "--detach" {
@@ -51,11 +58,21 @@ impl Config {
                 continue;
             }
 
-            if let Ok(job) = arg.parse::<usize>() {
+            if config.safe {
+                // Check for fingerprint.
+                if let Ok(job) = u64::from_str_radix(&arg, 16) {
+                    #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
+                    {
+                        config.job = Some(Job::Fingerprint(job));
+                        break;
+                    }
+                }
+            } else if let Ok(job) = arg.parse::<usize>() {
+                // Check for UID.
                 #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
                 {
-                    config.job = Some(job);
-                    continue;
+                    config.job = Some(Job::Uid(job));
+                    break;
                 }
             }
 
@@ -66,7 +83,7 @@ impl Config {
     }
 }
 
-// TODO: Split extras out to --help --verbose or something
+// TODO: Split extras out to --help --verbose or something (-v vs. --verbose)
 pub fn help_message() -> String {
     format!(
         "\
@@ -78,6 +95,7 @@ Options:
   -h, --help           Show this message and exit.
   -v, --version        Show the version and exit.
   -l, --list-only      List available jobs and exit.
+  -s, --safe           Use job fingerprints.
   -d, --detach         Run job in the background.
 
 Examples:
@@ -119,6 +137,16 @@ Extras:
       {highlight}1.{reset} {attenuate}@daily{reset} docker image prune --force
 
   Descriptions and sections are independent from one another.
+
+Safe mode:
+  Job IDs are attributed in the order of appearance in the crontab. This
+  can be dangerous if used in scripts, because if the crontab changes,
+  the wrong job may get run.
+
+  Instead, you can activate `--safe` mode, in which jobs are identified
+  by a fingerprint. This is less user-friendly, but if the jobs get
+  reordered, or if the command changes, that fingerprint will be
+  invalidated and the run will fail.
 ",
         description = env!("CARGO_PKG_DESCRIPTION"),
         bin = env!("CARGO_BIN_NAME"),
@@ -159,6 +187,7 @@ mod tests {
                 help: false,
                 version: false,
                 list_only: false,
+                safe: false,
                 detach: false,
                 job: None,
             }
@@ -254,6 +283,8 @@ mod tests {
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains("-h, --help"));
         assert!(message.contains("-v, --version"));
+        assert!(message.contains("-l, --list-only"));
+        assert!(message.contains("-s, --safe"));
         assert!(message.contains("-d, --detach"));
     }
 
@@ -333,17 +364,59 @@ mod tests {
     }
 
     #[test]
-    fn argument_list_only_stops_after_match() {
+    fn argument_list_only_continues_after_match() {
         let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("--list-only"),
-            String::from("--unknown"),
+            String::from("--safe"),
         ]
         .into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
         assert!(config.list_only);
+        assert!(config.safe);
+    }
+
+    #[test]
+    fn argument_safe() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--safe"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.safe);
+    }
+
+    #[test]
+    fn argument_safe_shorthand() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("-s"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.safe);
+    }
+
+    #[test]
+    fn argument_safe_continues_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--safe"),
+            String::from("1337f"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.safe);
+        assert!(matches!(config.job, Some(Job::Fingerprint(78_719))));
     }
 
     #[test]
@@ -384,7 +457,7 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert!(config.detach);
-        assert!(matches!(config.job, Some(42)));
+        assert!(matches!(config.job, Some(Job::Uid(42))));
     }
 
     #[test]
@@ -397,11 +470,11 @@ mod tests {
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(matches!(config.job, Some(42)));
+        assert!(matches!(config.job, Some(Job::Uid(42))));
     }
 
     #[test]
-    fn argument_job_continues_after_match() {
+    fn argument_job_stops_after_match() {
         let args = [
             String::from("/usr/local/bin/cronrunner"),
             String::from("42"),
@@ -411,7 +484,7 @@ mod tests {
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(matches!(config.job, Some(42)));
-        assert!(config.version);
+        assert!(matches!(config.job, Some(Job::Uid(42))));
+        assert!(!config.version);
     }
 }

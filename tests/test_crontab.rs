@@ -95,6 +95,7 @@ fn run_job_error_other_reason() {
     let crontab = make_instance().unwrap();
     let job_not_in_crontab = CronJob {
         uid: 42,
+        fingerprint: 13_376_942,
         schedule: String::from("@never"),
         command: String::from("sleep infinity"),
         description: None,
@@ -121,6 +122,7 @@ fn run_job_detached_error_other_reason() {
     let crontab = make_instance().unwrap();
     let job_not_in_crontab = CronJob {
         uid: 42,
+        fingerprint: 13_376_942,
         schedule: String::from("@never"),
         command: String::from("sleep infinity"),
         description: None,
@@ -225,6 +227,7 @@ fn make_instance_success() {
             }),
             Token::CronJob(CronJob {
                 uid: 1,
+                fingerprint: 430_144_761_983_614_012,
                 schedule: String::from("5 0 * * *"),
                 command: String::from("$HOME/bin/daily.job >> $HOME/tmp/out 2>&1"),
                 description: None,
@@ -238,6 +241,7 @@ fn make_instance_success() {
             }),
             Token::CronJob(CronJob {
                 uid: 2,
+                fingerprint: 3_821_308_948_991_142_357,
                 schedule: String::from("15 14 1 * *"),
                 command: String::from("$HOME/bin/monthly"),
                 description: None,
@@ -249,6 +253,7 @@ fn make_instance_success() {
             }),
             Token::CronJob(CronJob {
                 uid: 3,
+                fingerprint: 10_608_454_177_928_423_339,
                 schedule: String::from("0 22 * * 1-5"),
                 command: String::from("mail -s \"It's 10pm\" joe%Joe,%%Where are your kids?%"),
                 description: None,
@@ -256,6 +261,7 @@ fn make_instance_success() {
             }),
             Token::CronJob(CronJob {
                 uid: 4,
+                fingerprint: 4_729_581_268_415_706_813,
                 schedule: String::from("23 0-23/2 * * *"),
                 command: String::from("echo \"run 23 minutes after midn, 2am, 4am ..., everyday\""),
                 description: None,
@@ -263,6 +269,7 @@ fn make_instance_success() {
             }),
             Token::CronJob(CronJob {
                 uid: 5,
+                fingerprint: 18_432_149_502_519_362_576,
                 schedule: String::from("5 4 * * sun"),
                 command: String::from("echo \"run at 5 after 4 every sunday\""),
                 description: None,

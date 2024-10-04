@@ -67,14 +67,15 @@ test: ## Run unit tests
 
 .PHONY: doc
 doc: ## Build documentation
-	@cargo doc
+	@cargo doc --all-features --document-private-items
+	@echo file://$(shell pwd)/target/doc/$(shell basename $(shell pwd))/index.html
 
 .PHONY: c
 c: coverage
 .PHONY: coverage
 coverage: ## Unit tests coverage report
-	@cargo tarpaulin --engine Llvm --timeout 120 --out Html --output-dir target/ --all-features
-	@open target/tarpaulin-report.html || xdg-open target/tarpaulin-report.html || :
+	@cargo tarpaulin --engine Llvm --timeout 120 --skip-clean --out Html --output-dir target/ --all-features
+	@echo file://$(shell pwd)/target/tarpaulin-report.html
 
 .PHONY: cpc
 cpc: coverage-pct

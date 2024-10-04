@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-pub mod args;
-pub mod exit_status;
-pub mod job;
-pub mod output;
-pub mod ui;
+#[derive(Debug, Eq, PartialEq)]
+pub enum Job {
+    Fingerprint(u64),
+    Uid(usize),
+}

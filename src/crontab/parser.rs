@@ -16,6 +16,7 @@
 
 use std::str::Chars;
 
+use super::hash;
 use super::tokens::{
     Comment, CommentKind, CronJob, JobDescription, JobSection, Token, Unknown, Variable,
 };
@@ -62,6 +63,7 @@ impl Parser {
     ///     tokens,
     ///     vec![Token::CronJob(CronJob {
     ///         uid: 1,
+    ///         fingerprint: 6_917_582_312_284_972_245,
     ///         schedule: String::from("@hourly"),
     ///         command: String::from("echo ':)'"),
     ///         description: None,
@@ -132,8 +134,12 @@ impl Parser {
         let previous_token = state.tokens.last();
         let description = Self::get_job_description_if_any(previous_token);
 
+        let uid = state.job_uid;
+        let fingerprint = hash::djb2(format!("uid({uid}),command({command})"));
+
         Ok(Token::CronJob(CronJob {
-            uid: state.job_uid,
+            uid,
+            fingerprint,
             schedule,
             command,
             description,
@@ -175,6 +181,8 @@ impl Parser {
     /// Then, we consume the characters, and every time we encounter
     /// whitespace (i.e., we go from _something_ to _whitespace_), we
     /// count one element.
+    ///
+    /// [`split_schedule_and_command()`]: Parser::split_schedule_and_command
     fn extract_schedule_from_job_chars(chars: &mut Chars) -> String {
         let first_char = chars
             .next()
@@ -411,6 +419,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 17_695_356_924_205_779_724,
                     schedule: String::from("@reboot"),
                     command: String::from("/usr/bin/bash ~/startup.sh"),
                     description: None,
@@ -432,6 +441,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
+                    fingerprint: 8_740_762_385_512_907_025,
                     schedule: String::from("30 20 * * *"),
                     command: String::from(
                         "/usr/local/bin/brew update && /usr/local/bin/brew upgrade"
@@ -453,6 +463,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 3,
+                    fingerprint: 17_118_619_922_108_271_534,
                     schedule: String::from("* * * * *"),
                     command: String::from("echo $FOO"),
                     description: Some(JobDescription(String::from("Print variable."))),
@@ -467,6 +478,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 4,
+                    fingerprint: 15_438_538_048_322_941_730,
                     schedule: String::from("@reboot"),
                     command: String::from(":"),
                     description: None,
@@ -492,6 +504,7 @@ mod tests {
             vec![
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -499,6 +512,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
+                    fingerprint: 4_461_213_176_276_726_319,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -506,6 +520,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 3,
+                    fingerprint: 6_015_366_411_386_091_056,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -513,6 +528,125 @@ mod tests {
                 })
             ]
         );
+    }
+
+    #[test]
+    fn fingerprints_are_unique() {
+        let tokens = Parser::parse(
+            "* * * * * printf 'hello, world'
+             * * * * * printf 'hello, world'
+             * * * * * printf 'hello, world'",
+        );
+
+        let Token::CronJob(job_0) = &tokens[0] else {
+            panic!()
+        };
+        let Token::CronJob(job_1) = &tokens[1] else {
+            panic!()
+        };
+        let Token::CronJob(job_2) = &tokens[2] else {
+            panic!()
+        };
+
+        assert_eq!(job_0.fingerprint, 2_907_059_941_167_361_582);
+        assert_eq!(job_1.fingerprint, 4_461_213_176_276_726_319);
+        assert_eq!(job_2.fingerprint, 6_015_366_411_386_091_056);
+    }
+
+    #[test]
+    fn fingerprint_changes_if_uid_changes() {
+        let tokens = Parser::parse(
+            "* * * * * printf 'foo'
+             * * * * * printf 'hello, world'
+             * * * * * printf 'bar'",
+        );
+
+        let Token::CronJob(job) = &tokens[1] else {
+            panic!()
+        };
+
+        assert_eq!(job.uid, 2);
+        assert_eq!(job.fingerprint, 4_461_213_176_276_726_319);
+        assert_eq!(job.command, "printf 'hello, world'");
+
+        let tokens = Parser::parse(
+            "* * * * * printf 'foo'
+             * * * * * printf 'baz'
+             * * * * * printf 'hello, world'
+             * * * * * printf 'bar'",
+        );
+
+        let Token::CronJob(job) = &tokens[2] else {
+            panic!()
+        };
+
+        assert_eq!(job.uid, 3);
+        assert_eq!(job.fingerprint, 6_015_366_411_386_091_056);
+        assert_eq!(job.command, "printf 'hello, world'");
+    }
+
+    #[test]
+    fn fingerprint_is_stable_if_only_the_surroundings_change() {
+        let tokens = Parser::parse(
+            "* * * * * printf 'foo'
+             * * * * * printf 'hello, world'
+             * * * * * printf 'bar'",
+        );
+
+        let Token::CronJob(job) = &tokens[1] else {
+            panic!()
+        };
+
+        assert_eq!(job.uid, 2);
+        assert_eq!(job.fingerprint, 4_461_213_176_276_726_319);
+        assert_eq!(job.command, "printf 'hello, world'");
+
+        let tokens = Parser::parse(
+            "* * * * * printf 'bar'
+             FOO=bar
+             1 2 3 4 5 printf 'hello, world'
+             1 2 3 4 5 printf 'baz'
+             * * * * * printf 'foo'",
+        );
+
+        let Token::CronJob(job) = &tokens[2] else {
+            panic!()
+        };
+
+        assert_eq!(job.uid, 2);
+        assert_eq!(job.fingerprint, 4_461_213_176_276_726_319);
+        assert_eq!(job.command, "printf 'hello, world'");
+    }
+
+    #[test]
+    fn fingerprint_changes_if_command_changes() {
+        let tokens = Parser::parse(
+            "* * * * * printf 'foo'
+             * * * * * printf 'hello, world'
+             * * * * * printf 'bar'",
+        );
+
+        let Token::CronJob(job) = &tokens[1] else {
+            panic!()
+        };
+
+        assert_eq!(job.uid, 2);
+        assert_eq!(job.fingerprint, 4_461_213_176_276_726_319);
+        assert_eq!(job.command, "printf 'hello, world'");
+
+        let tokens = Parser::parse(
+            "* * * * * printf 'foo'
+             * * * * * printf 'hello, goodbye'
+             * * * * * printf 'bar'",
+        );
+
+        let Token::CronJob(job) = &tokens[1] else {
+            panic!()
+        };
+
+        assert_eq!(job.uid, 2);
+        assert_eq!(job.fingerprint, 6_767_435_073_018_149_136);
+        assert_eq!(job.command, "printf 'hello, goodbye'");
     }
 
     #[test]
@@ -664,6 +798,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: Some(JobDescription(String::from("Job description"))),
@@ -686,6 +821,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -703,6 +839,7 @@ mod tests {
             tokens,
             vec![Token::CronJob(CronJob {
                 uid: 1,
+                fingerprint: 2_907_059_941_167_361_582,
                 schedule: String::from("* * * * *"),
                 command: String::from("printf 'hello, world'"),
                 description: None,
@@ -762,6 +899,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -772,6 +910,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
+                    fingerprint: 4_461_213_176_276_726_319,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -797,6 +936,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -824,6 +964,7 @@ mod tests {
             vec![
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -839,6 +980,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
+                    fingerprint: 4_461_213_176_276_726_319,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -853,6 +995,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 3,
+                    fingerprint: 6_015_366_411_386_091_056,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -882,6 +1025,7 @@ mod tests {
             vec![
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -893,6 +1037,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
+                    fingerprint: 4_461_213_176_276_726_319,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -907,6 +1052,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 3,
+                    fingerprint: 6_015_366_411_386_091_056,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -956,6 +1102,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -970,6 +1117,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
+                    fingerprint: 4_461_213_176_276_726_319,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -984,6 +1132,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 3,
+                    fingerprint: 6_015_366_411_386_091_056,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1013,6 +1162,7 @@ mod tests {
             vec![
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1024,6 +1174,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
+                    fingerprint: 4_461_213_176_276_726_319,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1038,6 +1189,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 3,
+                    fingerprint: 6_015_366_411_386_091_056,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1075,6 +1227,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: Some(JobDescription(String::from("Job description"))),
@@ -1085,6 +1238,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 2,
+                    fingerprint: 4_461_213_176_276_726_319,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1115,6 +1269,7 @@ mod tests {
                 }),
                 Token::CronJob(CronJob {
                     uid: 1,
+                    fingerprint: 1_621_249_689_450_973_832,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'buongiorno'"),
                     description: None,

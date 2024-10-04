@@ -25,7 +25,7 @@ use cronrunner::tokens::{CronJob, JobDescription, JobSection};
 
 use crate::cli::exit_status::ExitStatus;
 use crate::cli::output::Pager;
-use crate::cli::{args, ui};
+use crate::cli::{args, job::Job, ui};
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> ExitStatus {
@@ -51,30 +51,33 @@ fn main() -> ExitStatus {
     }
 
     if config.list_only {
-        print_job_selection_menu(&crontab.jobs());
+        print_job_selection_menu(&crontab.jobs(), config.safe);
         return ExitStatus::Success;
     }
 
     let job_selected = if let Some(job) = config.job {
         job
-    } else if let Some(job) = read_job_selection_from_stdin() {
+    } else if let Some(job) = read_job_selection_from_stdin(config.safe) {
         job
     } else {
-        print_job_selection_menu(&crontab.jobs());
+        print_job_selection_menu(&crontab.jobs(), config.safe);
 
-        match get_user_selection() {
+        match get_user_selection(config.safe) {
             Err(()) => return exit_from_invalid_job_selection(),
             Ok(None) => return ExitStatus::Success,
             Ok(Some(job)) => job,
         }
     };
 
-    if job_selected == 42 && crontab.jobs().len() < 42 {
+    if job_selected == Job::Uid(42) && crontab.jobs().len() < 42 {
         println!("What was the question again?");
         return ExitStatus::Success;
     }
 
-    let Some(job) = crontab.get_job_from_uid(job_selected) else {
+    let Some(job) = (match job_selected {
+        Job::Uid(job) => crontab.get_job_from_uid(job),
+        Job::Fingerprint(job) => crontab.get_job_from_fingerprint(job),
+    }) else {
         return exit_from_invalid_job_selection();
     };
 
@@ -118,40 +121,46 @@ fn exit_from_no_runnable_jobs() -> ExitStatus {
 }
 
 #[cfg(not(tarpaulin_include))]
-fn read_job_selection_from_stdin() -> Option<usize> {
+fn read_job_selection_from_stdin(use_fingerprint: bool) -> Option<Job> {
     // If the descriptor/handle refers to a terminal/tty, there is
     // nothing in stdin to be consumed yet.
     if io::stdin().is_terminal() {
         return None;
     }
+
     let mut job_selected = String::new();
     if io::stdin().read_line(&mut job_selected).is_err() {
         return None;
     }
-    match parse_user_job_selection(&job_selected) {
+
+    match parse_user_job_selection(&job_selected, use_fingerprint) {
         Ok(Some(job_selected)) => Some(job_selected),
         _ => None,
     }
 }
 
 #[cfg(not(tarpaulin_include))]
-fn print_job_selection_menu(jobs: &Vec<&CronJob>) {
-    let entries = format_jobs_as_menu_entries(jobs);
+fn print_job_selection_menu(jobs: &Vec<&CronJob>, use_fingerprint: bool) {
+    let entries = format_jobs_as_menu_entries(jobs, use_fingerprint);
     println!("{}", entries.join("\n"));
 }
 
-fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
+fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>, use_fingerprint: bool) -> Vec<String> {
     let mut menu = Vec::with_capacity(jobs.len());
 
     let mut last_section = None;
-    let max_uid_width = determine_max_uid_width(jobs);
+    let max_id_width = determine_max_id_width(jobs, use_fingerprint);
 
     for &job in jobs {
         if let Some(new_section) = update_section_if_needed(job, &mut last_section) {
             menu.push(format_job_section(new_section));
         }
 
-        let number = format_job_uid(job.uid, max_uid_width);
+        let number = if use_fingerprint {
+            format_job_fingerprint(job.fingerprint, max_id_width)
+        } else {
+            format_job_uid(job.uid, max_id_width)
+        };
         let description = format_job_description(&job.description);
         let schedule = format_job_schedule(&job.schedule);
         let command = format_job_command(&job.command, !description.is_empty());
@@ -164,9 +173,16 @@ fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>) -> Vec<String> {
     menu
 }
 
-fn determine_max_uid_width(jobs: &[&CronJob]) -> usize {
-    let max_uid = jobs.iter().map(|job| job.uid).max().unwrap_or(0);
-    max_uid.to_string().len()
+fn determine_max_id_width(jobs: &[&CronJob], use_fingerprint: bool) -> usize {
+    if use_fingerprint {
+        jobs.iter()
+            .map(|job| format!("{:x}", job.fingerprint).len())
+            .max()
+            .unwrap_or(0)
+    } else {
+        let max_uid = jobs.iter().map(|job| job.uid).max().unwrap_or(0);
+        max_uid.to_string().len()
+    }
 }
 
 fn update_section_if_needed<'a>(
@@ -182,6 +198,10 @@ fn update_section_if_needed<'a>(
 
 fn format_job_section(section: &JobSection) -> String {
     format!("\n{}\n", ui::Color::title(&section.to_string()))
+}
+
+fn format_job_fingerprint(fingerprint: u64, max_uid_width: usize) -> String {
+    ui::Color::highlight(&format!("{fingerprint:0>max_uid_width$x}"))
 }
 
 fn format_job_uid(uid: usize, max_uid_width: usize) -> String {
@@ -217,7 +237,7 @@ fn add_spacing_to_menu_if_it_has_sections(menu: &mut Vec<String>, has_sections: 
 }
 
 #[cfg(not(tarpaulin_include))]
-fn get_user_selection() -> Result<Option<usize>, ()> {
+fn get_user_selection(use_fingerprint: bool) -> Result<Option<Job>, ()> {
     print!(">>> Select a job to run: ");
     // Flush manually in case `stdout` is line-buffered (common case),
     // else the previous print won't be displayed immediately (no `\n`).
@@ -228,21 +248,25 @@ fn get_user_selection() -> Result<Option<usize>, ()> {
         .read_line(&mut job_selected)
         .expect("cannot read user input");
 
-    parse_user_job_selection(&job_selected)
+    parse_user_job_selection(&job_selected, use_fingerprint)
 }
 
-fn parse_user_job_selection(job_selected: &str) -> Result<Option<usize>, ()> {
+fn parse_user_job_selection(job_selected: &str, use_fingerprint: bool) -> Result<Option<Job>, ()> {
     let job_selected = String::from(job_selected.trim());
 
     if job_selected.is_empty() {
         return Ok(None);
     }
 
-    if let Ok(job_selected) = job_selected.parse::<usize>() {
-        Ok(Some(job_selected))
-    } else {
-        Err(())
+    if use_fingerprint {
+        if let Ok(job_selected) = u64::from_str_radix(&job_selected, 16) {
+            return Ok(Some(Job::Fingerprint(job_selected)));
+        }
+    } else if let Ok(job_selected) = job_selected.parse::<usize>() {
+        return Ok(Some(Job::Uid(job_selected)));
     }
+
+    Err(())
 }
 
 fn exit_from_invalid_job_selection() -> ExitStatus {
@@ -359,6 +383,7 @@ mod tests {
         let tokens = [
             CronJob {
                 uid: 1,
+                fingerprint: 13_376_942,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -366,6 +391,7 @@ mod tests {
             },
             CronJob {
                 uid: 2,
+                fingerprint: 13_376_942,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'buongiorno'"),
                 description: Some(JobDescription(String::from("This job has a description"))),
@@ -373,7 +399,7 @@ mod tests {
             },
         ];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect());
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), false);
 
         assert_eq!(
             entries,
@@ -385,10 +411,43 @@ mod tests {
     }
 
     #[test]
+    fn format_menu_entries_with_fingerprint() {
+        let tokens = [
+            CronJob {
+                uid: 1,
+                fingerprint: 13_376_942,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'hello, world'"),
+                description: None,
+                section: None,
+            },
+            CronJob {
+                uid: 2,
+                fingerprint: 1_234_567,
+                schedule: String::from("@monthly"),
+                command: String::from("echo 'buongiorno'"),
+                description: Some(JobDescription(String::from("This job has a description"))),
+                section: None,
+            },
+        ];
+
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), true);
+
+        assert_eq!(
+            entries,
+            vec![
+                String::from("\u{1b}[0;92mcc1dae\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'hello, world'"),
+                String::from("\u{1b}[0;92m12d687\u{1b}[0m This job has a description \u{1b}[0;90m@monthly\u{1b}[0m \u{1b}[0;90mecho 'buongiorno'\u{1b}[0m"),
+            ]
+        );
+    }
+
+    #[test]
     fn format_menu_sections() {
         let tokens = [
             CronJob {
                 uid: 1,
+                fingerprint: 13_376_942,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'foo'"),
                 description: None,
@@ -396,6 +455,7 @@ mod tests {
             },
             CronJob {
                 uid: 2,
+                fingerprint: 13_376_942,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'bar'"),
                 description: None,
@@ -406,6 +466,7 @@ mod tests {
             },
             CronJob {
                 uid: 3,
+                fingerprint: 13_376_942,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'baz'"),
                 description: None,
@@ -416,7 +477,7 @@ mod tests {
             },
         ];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect());
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), false);
 
         assert_eq!(
             entries,
@@ -436,6 +497,7 @@ mod tests {
         let tokens = [
             CronJob {
                 uid: 1,
+                fingerprint: 13_376_942,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -443,6 +505,7 @@ mod tests {
             },
             CronJob {
                 uid: 108,
+                fingerprint: 13_376_942,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -450,6 +513,7 @@ mod tests {
             },
             CronJob {
                 uid: 12,
+                fingerprint: 13_376_942,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -457,7 +521,7 @@ mod tests {
             },
         ];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect());
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), false);
 
         assert!(entries[0].starts_with("\u{1b}[0;92m  1.\u{1b}[0m"));
         assert!(entries[1].starts_with("\u{1b}[0;92m108.\u{1b}[0m"));
@@ -465,16 +529,53 @@ mod tests {
     }
 
     #[test]
+    fn job_uid_alignment_with_fingerprint() {
+        let tokens = [
+            CronJob {
+                uid: 1,
+                fingerprint: 1,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'hello, world'"),
+                description: None,
+                section: None,
+            },
+            CronJob {
+                uid: 1337,
+                fingerprint: 1337,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'hello, world'"),
+                description: None,
+                section: None,
+            },
+            CronJob {
+                uid: 12,
+                fingerprint: 12,
+                schedule: String::from("@hourly"),
+                command: String::from("echo 'hello, world'"),
+                description: None,
+                section: None,
+            },
+        ];
+
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), true);
+
+        assert!(entries[0].starts_with("\u{1b}[0;92m001\u{1b}[0m"));
+        assert!(entries[1].starts_with("\u{1b}[0;92m539\u{1b}[0m"));
+        assert!(entries[2].starts_with("\u{1b}[0;92m00c\u{1b}[0m"));
+    }
+
+    #[test]
     fn format_menu_entries_uid_is_correct() {
         let tokens = [CronJob {
             uid: 42,
+            fingerprint: 13_376_942,
             schedule: String::from("@hourly"),
             command: String::from("echo '¡hola!'"),
             description: None,
             section: None,
         }];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect());
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), false);
 
         assert_eq!(
             entries,
@@ -485,31 +586,96 @@ mod tests {
     }
 
     #[test]
-    fn parse_user_job_selection_success() {
-        let selection = parse_user_job_selection("1").unwrap().unwrap();
+    fn format_menu_entries_fingerprint_is_correct() {
+        let tokens = [CronJob {
+            uid: 42,
+            fingerprint: 13_376_942,
+            schedule: String::from("@hourly"),
+            command: String::from("echo '¡hola!'"),
+            description: None,
+            section: None,
+        }];
 
-        assert_eq!(selection, 1);
+        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), true);
+
+        assert_eq!(
+            entries,
+            vec![String::from(
+                "\u{1b}[0;92mcc1dae\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo '¡hola!'"
+            )]
+        );
     }
 
     #[test]
-    fn parse_user_job_selection_success_with_whitespace() {
-        let selection = parse_user_job_selection(&String::from("   1337   \n"))
+    fn parse_user_job_selection_fingerprint_redirection() {
+        let selection = parse_user_job_selection("1", true).unwrap().unwrap();
+
+        assert!(matches!(selection, Job::Fingerprint(_)));
+    }
+
+    #[test]
+    fn parse_user_job_selection_uid_redirection() {
+        let selection = parse_user_job_selection("1", false).unwrap().unwrap();
+
+        assert!(matches!(selection, Job::Uid(_)));
+    }
+
+    #[test]
+    fn parse_user_job_selection_fingerprint_success() {
+        let selection = parse_user_job_selection("1", true).unwrap().unwrap();
+
+        assert_eq!(selection, Job::Fingerprint(1));
+    }
+
+    #[test]
+    fn parse_user_job_selection_fingerprint_success_with_whitespace() {
+        let selection = parse_user_job_selection(&String::from("   1337   \n"), true)
             .unwrap()
             .unwrap();
 
-        assert_eq!(selection, 1337);
+        assert_eq!(selection, Job::Fingerprint(4919));
     }
 
     #[test]
-    fn parse_user_job_selection_success_but_empty() {
-        let selection = parse_user_job_selection("    \n").unwrap();
+    fn parse_user_job_selection_fingerprint_success_but_empty() {
+        let selection = parse_user_job_selection("    \n", true).unwrap();
 
         assert!(selection.is_none());
     }
 
     #[test]
-    fn parse_user_job_selection_error() {
-        let selection = parse_user_job_selection("-1");
+    fn parse_user_job_selection_fingerprint_error() {
+        let selection = parse_user_job_selection("-1", true);
+
+        assert_eq!(selection, Err(()));
+    }
+
+    #[test]
+    fn parse_user_job_selection_uid_success() {
+        let selection = parse_user_job_selection("1", false).unwrap().unwrap();
+
+        assert_eq!(selection, Job::Uid(1));
+    }
+
+    #[test]
+    fn parse_user_job_selection_uid_success_with_whitespace() {
+        let selection = parse_user_job_selection(&String::from("   1337   \n"), false)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(selection, Job::Uid(1337));
+    }
+
+    #[test]
+    fn parse_user_job_selection_uid_success_but_empty() {
+        let selection = parse_user_job_selection("    \n", false).unwrap();
+
+        assert!(selection.is_none());
+    }
+
+    #[test]
+    fn parse_user_job_selection_uid_error() {
+        let selection = parse_user_job_selection("-1", false);
 
         assert_eq!(selection, Err(()));
     }
