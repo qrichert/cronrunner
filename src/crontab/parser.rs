@@ -31,7 +31,7 @@ use super::tokens::{
 /// code clarity.
 struct ParserState {
     tokens: Vec<Token>,
-    job_uid: u32,
+    job_uid: usize,
     job_section: Option<JobSection>,
 }
 

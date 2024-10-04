@@ -118,7 +118,7 @@ fn exit_from_no_runnable_jobs() -> ExitStatus {
 }
 
 #[cfg(not(tarpaulin_include))]
-fn read_job_selection_from_stdin() -> Option<u32> {
+fn read_job_selection_from_stdin() -> Option<usize> {
     // If the descriptor/handle refers to a terminal/tty, there is
     // nothing in stdin to be consumed yet.
     if io::stdin().is_terminal() {
@@ -184,7 +184,7 @@ fn format_job_section(section: &JobSection) -> String {
     format!("\n{}\n", ui::Color::title(&section.to_string()))
 }
 
-fn format_job_uid(uid: u32, max_uid_width: usize) -> String {
+fn format_job_uid(uid: usize, max_uid_width: usize) -> String {
     ui::Color::highlight(&format!("{uid:>max_uid_width$}."))
 }
 
@@ -217,7 +217,7 @@ fn add_spacing_to_menu_if_it_has_sections(menu: &mut Vec<String>, has_sections: 
 }
 
 #[cfg(not(tarpaulin_include))]
-fn get_user_selection() -> Result<Option<u32>, ()> {
+fn get_user_selection() -> Result<Option<usize>, ()> {
     print!(">>> Select a job to run: ");
     // Flush manually in case `stdout` is line-buffered (common case),
     // else the previous print won't be displayed immediately (no `\n`).
@@ -231,14 +231,14 @@ fn get_user_selection() -> Result<Option<u32>, ()> {
     parse_user_job_selection(&job_selected)
 }
 
-fn parse_user_job_selection(job_selected: &str) -> Result<Option<u32>, ()> {
+fn parse_user_job_selection(job_selected: &str) -> Result<Option<usize>, ()> {
     let job_selected = String::from(job_selected.trim());
 
     if job_selected.is_empty() {
         return Ok(None);
     }
 
-    if let Ok(job_selected) = job_selected.parse::<u32>() {
+    if let Ok(job_selected) = job_selected.parse::<usize>() {
         Ok(Some(job_selected))
     } else {
         Err(())

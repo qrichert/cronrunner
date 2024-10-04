@@ -130,7 +130,7 @@ impl Crontab {
 
     /// Get a job object from its [`UID`](CronJob::uid).
     #[must_use]
-    pub fn get_job_from_uid(&self, job_uid: u32) -> Option<&CronJob> {
+    pub fn get_job_from_uid(&self, job_uid: usize) -> Option<&CronJob> {
         self.jobs().into_iter().find(|job| job.uid == job_uid)
     }
 

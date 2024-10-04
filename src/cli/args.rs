@@ -23,7 +23,7 @@ pub struct Config {
     pub version: bool,
     pub list_only: bool,
     pub detach: bool,
-    pub job: Option<u32>,
+    pub job: Option<usize>,
 }
 
 impl Config {
@@ -62,7 +62,7 @@ impl Config {
                 continue;
             }
 
-            if let Ok(job) = arg.parse::<u32>() {
+            if let Ok(job) = arg.parse::<usize>() {
                 #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
                 {
                     config.job = Some(job);
