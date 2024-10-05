@@ -35,7 +35,10 @@ fn main() -> ExitStatus {
     };
 
     if config.help {
-        Pager::page_or_print(&args::help_message());
+        println!("{}\n{}", args::help_message(), args::longer_help_notice());
+        return ExitStatus::Success;
+    } else if config.long_help {
+        Pager::page_or_print(&args::long_help_message());
         return ExitStatus::Success;
     } else if config.version {
         println!("{}", args::version_message());

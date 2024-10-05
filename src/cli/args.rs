@@ -21,6 +21,7 @@ use super::ui;
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct Config {
     pub help: bool,
+    pub long_help: bool,
     pub version: bool,
     pub list_only: bool,
     pub safe: bool,
@@ -33,8 +34,12 @@ impl Config {
         let mut config = Self::default();
 
         for arg in args.skip(1) {
-            if arg == "-h" || arg == "--help" {
+            if arg == "-h" {
                 config.help = true;
+                break;
+            }
+            if arg == "--help" {
+                config.long_help = true;
                 break;
             }
 
@@ -83,7 +88,6 @@ impl Config {
     }
 }
 
-// TODO: Split extras out to --help --verbose or something (-v vs. --verbose)
 pub fn help_message() -> String {
     format!(
         "\
@@ -97,7 +101,23 @@ Options:
   -l, --list-only      List available jobs and exit.
   -s, --safe           Use job fingerprints.
   -d, --detach         Run job in the background.
+",
+        description = env!("CARGO_PKG_DESCRIPTION"),
+        bin = env!("CARGO_BIN_NAME"),
+    )
+}
 
+pub fn longer_help_notice() -> String {
+    format!(
+        "For full help, see `{bin} --help`.",
+        bin = env!("CARGO_BIN_NAME")
+    )
+}
+
+pub fn long_help_message() -> String {
+    format!(
+        "\
+{help}
 Examples:
   If you know the ID of a job, you can run it directly:
 
@@ -148,7 +168,7 @@ Safe mode:
   reordered, or if the command changes, that fingerprint will be
   invalidated and the run will fail.
 ",
-        description = env!("CARGO_PKG_DESCRIPTION"),
+        help = help_message(),
         bin = env!("CARGO_BIN_NAME"),
         comment = ui::Color::maybe_color("\x1b[96m"),
         schedule = ui::Color::maybe_color("\x1b[38;5;224m"),
@@ -185,6 +205,7 @@ mod tests {
             Config::default(),
             Config {
                 help: false,
+                long_help: false,
                 version: false,
                 list_only: false,
                 safe: false,
@@ -239,19 +260,6 @@ mod tests {
     fn argument_help() {
         let args = [
             String::from("/usr/local/bin/cronrunner"),
-            String::from("--help"),
-        ]
-        .into_iter();
-
-        let config = Config::build_from_args(args).unwrap();
-
-        assert!(config.help);
-    }
-
-    #[test]
-    fn argument_help_shorthand() {
-        let args = [
-            String::from("/usr/local/bin/cronrunner"),
             String::from("-h"),
         ]
         .into_iter();
@@ -259,13 +267,14 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert!(config.help);
+        assert!(!config.long_help);
     }
 
     #[test]
     fn argument_help_stops_after_match() {
         let args = [
             String::from("/usr/local/bin/cronrunner"),
-            String::from("--help"),
+            String::from("-h"),
             String::from("--unknown"),
         ]
         .into_iter();
@@ -286,6 +295,53 @@ mod tests {
         assert!(message.contains("-l, --list-only"));
         assert!(message.contains("-s, --safe"));
         assert!(message.contains("-d, --detach"));
+    }
+
+    #[test]
+    fn longer_help_notice_contains_bin_and_arg() {
+        let message = longer_help_notice();
+
+        dbg!(&message);
+        assert!(message.contains(env!("CARGO_BIN_NAME")));
+        assert!(message.contains("--help"));
+    }
+
+    #[test]
+    fn argument_long_help() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--help"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.long_help);
+        assert!(!config.help);
+    }
+
+    #[test]
+    fn argument_long_help_stops_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--help"),
+            String::from("--unknown"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.long_help);
+    }
+
+    #[test]
+    fn long_help_message_contains_short_help_message() {
+        let message = long_help_message();
+
+        dbg!(&message);
+        assert!(message.contains(env!("CARGO_BIN_NAME")));
+        assert!(message.contains("-h, --help"));
+        assert!(message.contains("-v, --version"));
     }
 
     #[test]
