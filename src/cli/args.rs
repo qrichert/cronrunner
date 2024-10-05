@@ -24,6 +24,7 @@ pub struct Config {
     pub long_help: bool,
     pub version: bool,
     pub list_only: bool,
+    pub as_json: bool,
     pub safe: bool,
     pub detach: bool,
     pub job: Option<Job>,
@@ -50,6 +51,12 @@ impl Config {
 
             if arg == "-l" || arg == "--list-only" {
                 config.list_only = true;
+                continue;
+            }
+
+            if arg == "--as-json" {
+                config.list_only = true;
+                config.as_json = true;
                 continue;
             }
 
@@ -99,6 +106,7 @@ Options:
   -h, --help           Show this message and exit.
   -v, --version        Show the version and exit.
   -l, --list-only      List available jobs and exit.
+      --as-json        Render `--list-only` as JSON.
   -s, --safe           Use job fingerprints.
   -d, --detach         Run job in the background.
 ",
@@ -208,6 +216,7 @@ mod tests {
                 long_help: false,
                 version: false,
                 list_only: false,
+                as_json: false,
                 safe: false,
                 detach: false,
                 job: None,
@@ -293,6 +302,7 @@ mod tests {
         assert!(message.contains("-h, --help"));
         assert!(message.contains("-v, --version"));
         assert!(message.contains("-l, --list-only"));
+        assert!(message.contains("--as-json"));
         assert!(message.contains("-s, --safe"));
         assert!(message.contains("-d, --detach"));
     }
@@ -432,6 +442,49 @@ mod tests {
 
         assert!(config.list_only);
         assert!(config.safe);
+    }
+
+    #[test]
+    fn argument_as_json() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--as-json"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.as_json);
+    }
+
+    #[test]
+    fn argument_as_json_continues_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--as-json"),
+            String::from("--safe"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.as_json);
+        assert!(config.safe);
+    }
+
+    #[test]
+    fn argument_as_json_implicitly_activates_list_only() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--list-only"),
+            String::from("--as-json"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.list_only);
+        assert!(config.as_json);
     }
 
     #[test]

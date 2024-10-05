@@ -20,8 +20,10 @@ pub mod parser;
 pub mod reader;
 pub mod tokens;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
+use std::fmt::Write;
 use std::process::{Command, Stdio};
 
 use self::parser::Parser;
@@ -366,6 +368,59 @@ impl Crontab {
                 "Could not read Home directory from environment.",
             ))
         }
+    }
+}
+
+impl Crontab {
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        let jobs = self.jobs();
+
+        let mut json = String::with_capacity(jobs.len() * 250);
+        let mut jobs = jobs.iter().peekable();
+
+        _ = write!(json, "[");
+        while let Some(job) = jobs.next() {
+            _ = write!(json, "{{");
+            _ = write!(json, r#""uid":{},"#, job.uid);
+            _ = write!(json, r#""fingerprint":"{:x}","#, job.fingerprint);
+            _ = write!(json, r#""schedule":"{}","#, job.schedule);
+            _ = write!(
+                json,
+                r#""command":"{}","#,
+                job.command.replace('"', r#"\""#)
+            );
+            _ = write!(
+                json,
+                r#""description":{},"#,
+                job.description.as_ref().map_or_else(
+                    || Cow::Borrowed("null"),
+                    |description| {
+                        Cow::Owned(format!(r#""{}""#, description.0.replace('"', r#"\""#)))
+                    }
+                )
+            );
+            _ = write!(
+                json,
+                r#""section":{}"#,
+                job.section.as_ref().map_or_else(
+                    || Cow::Borrowed("null"),
+                    |section| Cow::Owned(format!(
+                        r#"{{"uid":{},"title":"{}"}}"#,
+                        section.uid,
+                        section.title.replace('"', r#"\""#)
+                    ))
+                )
+            );
+            _ = write!(json, "}}");
+
+            if jobs.peek().is_some() {
+                _ = write!(json, ",");
+            }
+        }
+        _ = write!(json, "]");
+
+        json
     }
 }
 
@@ -1106,5 +1161,46 @@ mod tests {
         let error = crontab.make_shell_command(&job_not_in_crontab).unwrap_err();
 
         assert_eq!(error, "The given job is not in the crontab.");
+    }
+
+    #[test]
+    fn to_json() {
+        let crontab = Crontab::new(vec![
+            Token::Variable(Variable {
+                identifier: String::from("HOME"),
+                value: String::from("/home/user1"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 1,
+                fingerprint: 13_376_942,
+                schedule: String::from("@daily"),
+                command: String::from("/usr/bin/bash ~/startup.sh"),
+                description: None,
+                section: None,
+            }),
+            Token::Variable(Variable {
+                identifier: String::from("HOME"),
+                value: String::from("/home/user2"),
+            }),
+            Token::CronJob(CronJob {
+                uid: 2,
+                fingerprint: 17_118_619_922_108_271_534,
+                schedule: String::from("* * * * *"),
+                command: String::from("echo \"$FOO\""),
+                description: Some(JobDescription(String::from("Print \"variable\"."))),
+                section: Some(tokens::JobSection {
+                    uid: 1,
+                    title: String::from("Some \"testing\" going on here..."),
+                }),
+            }),
+        ]);
+
+        let json = crontab.to_json();
+
+        println!("{}", &json);
+        assert_eq!(
+            json,
+            r#"[{"uid":1,"fingerprint":"cc1dae","schedule":"@daily","command":"/usr/bin/bash ~/startup.sh","description":null,"section":null},{"uid":2,"fingerprint":"ed918e1eee304bae","schedule":"* * * * *","command":"echo \"$FOO\"","description":"Print \"variable\".","section":{"uid":1,"title":"Some \"testing\" going on here..."}}]"#
+        );
     }
 }

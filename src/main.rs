@@ -54,7 +54,11 @@ fn main() -> ExitStatus {
     }
 
     if config.list_only {
-        print_job_selection_menu(&crontab.jobs(), config.safe);
+        if config.as_json {
+            println!("{}", crontab.to_json());
+        } else {
+            print_job_selection_menu(&crontab.jobs(), config.safe);
+        }
         return ExitStatus::Success;
     }
 

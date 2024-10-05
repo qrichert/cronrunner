@@ -36,11 +36,12 @@ Run cron jobs manually.
 Usage: cronrunner [OPTIONS] [ID]
 
 Options:
--h, --help           Show this message and exit.
--v, --version        Show the version and exit.
--l, --list-only      List available jobs and exit.
--s, --safe           Use job fingerprints.
--d, --detach         Run job in the background.
+  -h, --help           Show this message and exit.
+  -v, --version        Show the version and exit.
+  -l, --list-only      List available jobs and exit.
+      --as-json        Render `--list-only` as JSON.
+  -s, --safe           Use job fingerprints.
+  -d, --detach         Run job in the background.
 ```
 
 ### Examples
