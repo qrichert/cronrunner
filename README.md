@@ -28,6 +28,86 @@ FOO=:)
 @daily docker image prune --force
 ```
 
+## Get `--help`
+
+```
+Run cron jobs manually.
+
+Usage: cronrunner [OPTIONS] [ID]
+
+Options:
+-h, --help           Show this message and exit.
+-v, --version        Show the version and exit.
+-l, --list-only      List available jobs and exit.
+-s, --safe           Use job fingerprints.
+-d, --detach         Run job in the background.
+```
+
+### Examples
+
+If you know the ID of a job, you can run it directly:
+
+```console
+# Run job number 1.
+$ cronrunner 1
+Running...
+```
+
+If the job takes a long time to run, you can detach it:
+
+```console
+# Prints the PID and exits.
+$ cronrunner --detach 3
+1337
+$ _
+```
+
+### Extras
+
+Comments that start with two hashes (##) and immediately precede a job
+are used as description for that job.
+
+```crontab
+## Say hello.
+@hourly echo "hello"
+```
+
+This job will be presented like this:
+
+```
+1. Say hello. @hourly echo "hello"
+```
+
+Comments that start with three hashes (###) are used as section headers,
+up until a new section starts or up until the end.
+
+```crontab
+### Housekeeping
+
+@daily docker image prune --force
+```
+
+This job will be presented like this:
+
+```
+Housekeeping
+
+1. @daily docker image prune --force
+```
+
+Descriptions and sections are independent from one another.
+
+### Safe mode
+
+Job IDs are attributed in the order of appearance in the crontab. This
+can be dangerous if used in scripts, because if the crontab changes, the
+wrong job may get run.
+
+Instead, you can activate `--safe` mode, in which jobs are identified by
+a fingerprint. This is less user-friendly, but if the jobs get
+reordered, or if the command changes, that fingerprint will be
+invalidated and the run will fail.
+
 ## Installation
 
 ### Directly
