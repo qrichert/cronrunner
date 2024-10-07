@@ -41,6 +41,7 @@ Options:
   -l, --list-only      List available jobs and exit.
       --as-json        Render `--list-only` as JSON.
   -s, --safe           Use job fingerprints.
+  -t, --tag <TAG>      Run specific tag.
   -d, --detach         Run job in the background.
 ```
 
@@ -65,8 +66,8 @@ $ _
 
 ### Extras
 
-Comments that start with two hashes (##) and immediately precede a job
-are used as description for that job.
+Comments that start with two hashes (`##`) and immediately precede a job
+are used as a description for that job.
 
 ```crontab
 ## Say hello.
@@ -79,8 +80,8 @@ This job will be presented like this:
 1. Say hello. @hourly echo "hello"
 ```
 
-Comments that start with three hashes (###) are used as section headers,
-up until a new section starts or up until the end.
+Comments that start with three hashes (`###`) are used as section
+headers, up until a new section starts or up until the end.
 
 ```crontab
 ### Housekeeping
@@ -108,6 +109,24 @@ Instead, you can activate `--safe` mode, in which jobs are identified by
 a fingerprint. This is less user-friendly, but if the jobs get
 reordered, or if the command changes, that fingerprint will be
 invalidated and the run will fail.
+
+Or, you could tag a specific job and run it with `--tag`. Tags are
+stable even if the underlying job changes. This is great for scripts,
+but it does not guarantee that the command remains the same.
+
+To define a tag, add a description comment starting with `%{...}`:
+
+```crontab
+## %{my-tag} Scriptable job.
+@reboot /usr/bin/bash ~/startup.sh
+```
+
+Then you can run it like this:
+
+```console
+$ cronrunner --tag my-tag
+Running...
+```
 
 ## Installation
 

@@ -31,7 +31,7 @@ use crate::cli::{args, job::Job, ui};
 fn main() -> ExitStatus {
     let config = match args::Config::build_from_args(env::args()) {
         Ok(config) => config,
-        Err(arg) => return exit_from_argument_error(&arg),
+        Err(arg) => return exit_from_arguments_error(&arg),
     };
 
     if config.help {
@@ -84,6 +84,7 @@ fn main() -> ExitStatus {
     let Some(job) = (match job_selected {
         Job::Uid(job) => crontab.get_job_from_uid(job),
         Job::Fingerprint(job) => crontab.get_job_from_fingerprint(job),
+        Job::Tag(tag) => crontab.get_job_from_tag(&tag),
     }) else {
         return exit_from_invalid_job_selection();
     };
@@ -98,8 +99,8 @@ fn main() -> ExitStatus {
     exit_from_run_result(res)
 }
 
-fn exit_from_argument_error(arg: &str) -> ExitStatus {
-    eprintln!("{}", args::unexpected_argument_error_message(arg));
+fn exit_from_arguments_error(arg: &str) -> ExitStatus {
+    eprintln!("{}", args::bad_arguments_error_message(arg));
     ExitStatus::ArgsError
 }
 
@@ -307,10 +308,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exit_from_argument_error_regular() {
+    fn exit_from_arguments_error_regular() {
         let arg = "--unknown";
 
-        let exit_code = exit_from_argument_error(arg);
+        let exit_code = exit_from_arguments_error(arg);
 
         assert_eq!(exit_code, ExitStatus::ArgsError);
     }
@@ -391,6 +392,7 @@ mod tests {
             CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -399,6 +401,7 @@ mod tests {
             CronJob {
                 uid: 2,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'buongiorno'"),
                 description: Some(JobDescription(String::from("This job has a description"))),
@@ -423,6 +426,7 @@ mod tests {
             CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -431,6 +435,7 @@ mod tests {
             CronJob {
                 uid: 2,
                 fingerprint: 1_234_567,
+                tag: None,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'buongiorno'"),
                 description: Some(JobDescription(String::from("This job has a description"))),
@@ -455,6 +460,7 @@ mod tests {
             CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'foo'"),
                 description: None,
@@ -463,6 +469,7 @@ mod tests {
             CronJob {
                 uid: 2,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'bar'"),
                 description: None,
@@ -474,6 +481,7 @@ mod tests {
             CronJob {
                 uid: 3,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@monthly"),
                 command: String::from("echo 'baz'"),
                 description: None,
@@ -505,6 +513,7 @@ mod tests {
             CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -513,6 +522,7 @@ mod tests {
             CronJob {
                 uid: 108,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -521,6 +531,7 @@ mod tests {
             CronJob {
                 uid: 12,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -541,6 +552,7 @@ mod tests {
             CronJob {
                 uid: 1,
                 fingerprint: 1,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -549,6 +561,7 @@ mod tests {
             CronJob {
                 uid: 1337,
                 fingerprint: 1337,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -557,6 +570,7 @@ mod tests {
             CronJob {
                 uid: 12,
                 fingerprint: 12,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -576,6 +590,7 @@ mod tests {
         let tokens = [CronJob {
             uid: 42,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@hourly"),
             command: String::from("echo '¡hola!'"),
             description: None,
@@ -597,6 +612,7 @@ mod tests {
         let tokens = [CronJob {
             uid: 42,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@hourly"),
             command: String::from("echo '¡hola!'"),
             description: None,

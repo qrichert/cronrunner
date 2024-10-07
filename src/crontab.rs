@@ -146,6 +146,14 @@ impl Crontab {
             .find(|job| job.fingerprint == fingerprint)
     }
 
+    /// Get a job object from its [`tag`](CronJob::tag).
+    #[must_use]
+    pub fn get_job_from_tag(&self, tag: &str) -> Option<&CronJob> {
+        self.jobs()
+            .into_iter()
+            .find(|job| job.tag.as_ref().is_some_and(|job_tag| job_tag == tag))
+    }
+
     /// Run a job.
     ///
     /// # Examples
@@ -157,6 +165,7 @@ impl Crontab {
     /// # let crontab: Crontab = Crontab::new(vec![Token::CronJob(CronJob {
     /// #     uid: 1,
     /// #     fingerprint: 13_376_942,
+    /// #     tag: None,
     /// #     schedule: String::new(),
     /// #     command: String::new(),
     /// #     description: None,
@@ -229,6 +238,7 @@ impl Crontab {
     /// # let crontab: Crontab = Crontab::new(vec![Token::CronJob(CronJob {
     /// #     uid: 1,
     /// #     fingerprint: 13_376_942,
+    /// #     tag: None,
     /// #     schedule: String::new(),
     /// #     command: String::new(),
     /// #     description: None,
@@ -384,6 +394,14 @@ impl Crontab {
             _ = write!(json, "{{");
             _ = write!(json, r#""uid":{},"#, job.uid);
             _ = write!(json, r#""fingerprint":"{:x}","#, job.fingerprint);
+            _ = write!(
+                json,
+                r#""tag":{},"#,
+                job.tag.as_ref().map_or_else(
+                    || Cow::Borrowed("null"),
+                    |tag| { Cow::Owned(format!(r#""{}""#, tag.replace('"', r#"\""#))) }
+                )
+            );
             _ = write!(json, r#""schedule":"{}","#, job.schedule);
             _ = write!(
                 json,
@@ -472,6 +490,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@reboot"),
                 command: String::from("/usr/bin/bash ~/startup.sh"),
                 description: None,
@@ -494,6 +513,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 2,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("30 20 * * *"),
                 command: String::from("/usr/local/bin/brew update && /usr/local/bin/brew upgrade"),
                 description: Some(JobDescription(String::from("Update brew."))),
@@ -510,6 +530,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 3,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("* * * * *"),
                 command: String::from("echo $FOO"),
                 description: Some(JobDescription(String::from("Print variable."))),
@@ -522,6 +543,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 4,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@reboot"),
                 command: String::from(":"),
                 description: None,
@@ -534,6 +556,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 5,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by bash!'"),
                 description: None,
@@ -546,6 +569,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 6,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@yerly"),
                 command: String::from("./cleanup.sh"),
                 description: None,
@@ -559,6 +583,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@hourly"),
             command: String::from("echo 'hello, world'"),
             description: None,
@@ -615,6 +640,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@daily"),
             command: String::from("docker image prune --force"),
             description: None,
@@ -625,6 +651,7 @@ mod tests {
         assert!(crontab.has_job(&CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@daily"),
             command: String::from("docker image prune --force"),
             description: None,
@@ -634,6 +661,7 @@ mod tests {
         assert!(!crontab.has_job(&CronJob {
             uid: 0,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@daily"),
             command: String::from("docker image prune --force"),
             description: None,
@@ -643,6 +671,7 @@ mod tests {
         assert!(!crontab.has_job(&CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("<invalid>"),
             command: String::from("<invalid>"),
             description: None,
@@ -655,6 +684,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@reboot"),
             command: String::from("echo 'hello, world'"),
             description: None,
@@ -668,6 +698,7 @@ mod tests {
             CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@reboot"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -681,6 +712,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@daily"),
             command: String::from("echo 'hello, world'"),
             description: None,
@@ -697,6 +729,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@reboot"),
             command: String::from("echo 'hello, world'"),
             description: None,
@@ -710,6 +743,7 @@ mod tests {
             CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@reboot"),
                 command: String::from("echo 'hello, world'"),
                 description: None,
@@ -723,6 +757,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@daily"),
             command: String::from("echo 'hello, world'"),
             description: None,
@@ -735,11 +770,68 @@ mod tests {
     }
 
     #[test]
+    fn get_job_from_tag() {
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            fingerprint: 13_376_942,
+            tag: Some(String::from("my-tag")),
+            schedule: String::from("@reboot"),
+            command: String::from("echo 'hello, world'"),
+            description: None,
+            section: None,
+        })]);
+
+        let job = crontab.get_job_from_tag("my-tag").unwrap();
+
+        assert_eq!(
+            *job,
+            CronJob {
+                uid: 1,
+                fingerprint: 13_376_942,
+                tag: Some(String::from("my-tag")),
+                schedule: String::from("@reboot"),
+                command: String::from("echo 'hello, world'"),
+                description: None,
+                section: None,
+            }
+        );
+    }
+
+    #[test]
+    fn get_job_from_tag_not_in_crontab() {
+        let crontab = Crontab::new(vec![
+            Token::CronJob(CronJob {
+                uid: 1,
+                fingerprint: 13_376_942,
+                tag: None,
+                schedule: String::from("@daily"),
+                command: String::from("echo 'hello, world'"),
+                description: None,
+                section: None,
+            }),
+            Token::CronJob(CronJob {
+                uid: 2,
+                fingerprint: 369_108,
+                tag: Some(String::from("MY-TAG")),
+                schedule: String::from("@daily"),
+                command: String::from("echo 'hello, world'"),
+                description: None,
+                section: None,
+            }),
+        ]);
+
+        let job = crontab.get_job_from_tag("my-tag");
+
+        assert!(job.is_none());
+    }
+
+    #[test]
     fn two_equal_jobs_are_treated_as_different_jobs() {
         let crontab = Crontab::new(vec![
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@daily"),
                 command: String::from("df -h > ~/track_disk_usage.txt"),
                 description: Some(JobDescription(String::from("Track disk usage."))),
@@ -752,6 +844,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 2,
                 fingerprint: 108_216_215,
+                tag: None,
                 schedule: String::from("@daily"),
                 command: String::from("df -h > ~/track_disk_usage.txt"),
                 description: Some(JobDescription(String::from("Track disk usage."))),
@@ -787,6 +880,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@reboot"),
             command: String::from("/usr/bin/bash ~/startup.sh"),
             description: Some(JobDescription(String::from("Description."))),
@@ -809,6 +903,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("* * * * *"),
                 command: String::from("echo $FOO"),
                 description: Some(JobDescription(String::from("Print variable."))),
@@ -840,6 +935,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("* * * * *"),
                 command: String::from("echo $FOO"),
                 description: Some(JobDescription(String::from("Print variable."))),
@@ -852,6 +948,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 2,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@reboot"),
                 command: String::from(":"),
                 description: None,
@@ -883,6 +980,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("30 9 * * * "),
                 command: String::from("echo 'gm'"),
                 description: None,
@@ -905,6 +1003,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@reboot"),
             command: String::from("cat a-file.txt"),
             description: None,
@@ -928,6 +1027,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by bash!'"),
                 description: None,
@@ -953,6 +1053,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by a custom shell!'"),
                 description: None,
@@ -977,6 +1078,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by bash!'"),
                 description: None,
@@ -989,6 +1091,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 2,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed by zsh!'"),
                 description: None,
@@ -1012,6 +1115,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@daily"),
             command: String::from("/usr/bin/bash ~/startup.sh"),
             description: None,
@@ -1038,6 +1142,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@yearly"),
                 command: String::from("./cleanup.sh"),
                 description: None,
@@ -1063,6 +1168,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I am echoed in a different Home!'"),
                 description: None,
@@ -1086,6 +1192,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@reboot"),
             command: String::from("/usr/bin/bash ~/startup.sh"),
             description: None,
@@ -1113,6 +1220,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I run is user1's Home!'"),
                 description: None,
@@ -1125,6 +1233,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 2,
                 fingerprint: 13_376_942,
+                tag: None,
                 schedule: String::from("@hourly"),
                 command: String::from("echo 'I run is user2's Home!'"),
                 description: None,
@@ -1144,6 +1253,7 @@ mod tests {
         let crontab = Crontab::new(vec![Token::CronJob(CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@hourly"),
             command: String::from("echo 'I am echoed by bash!'"),
             description: None,
@@ -1152,6 +1262,7 @@ mod tests {
         let job_not_in_crontab = CronJob {
             uid: 42,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@never"),
             command: String::from("sleep infinity"),
             description: None,
@@ -1173,6 +1284,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 13_376_942,
+                tag: Some(String::from("taggy \"tag\"")),
                 schedule: String::from("@daily"),
                 command: String::from("/usr/bin/bash ~/startup.sh"),
                 description: None,
@@ -1185,6 +1297,7 @@ mod tests {
             Token::CronJob(CronJob {
                 uid: 2,
                 fingerprint: 17_118_619_922_108_271_534,
+                tag: None,
                 schedule: String::from("* * * * *"),
                 command: String::from("echo \"$FOO\""),
                 description: Some(JobDescription(String::from("Print \"variable\"."))),
@@ -1200,7 +1313,7 @@ mod tests {
         println!("{}", &json);
         assert_eq!(
             json,
-            r#"[{"uid":1,"fingerprint":"cc1dae","schedule":"@daily","command":"/usr/bin/bash ~/startup.sh","description":null,"section":null},{"uid":2,"fingerprint":"ed918e1eee304bae","schedule":"* * * * *","command":"echo \"$FOO\"","description":"Print \"variable\".","section":{"uid":1,"title":"Some \"testing\" going on here..."}}]"#
+            r#"[{"uid":1,"fingerprint":"cc1dae","tag":"taggy \"tag\"","schedule":"@daily","command":"/usr/bin/bash ~/startup.sh","description":null,"section":null},{"uid":2,"fingerprint":"ed918e1eee304bae","tag":null,"schedule":"* * * * *","command":"echo \"$FOO\"","description":"Print \"variable\".","section":{"uid":1,"title":"Some \"testing\" going on here..."}}]"#
         );
     }
 }

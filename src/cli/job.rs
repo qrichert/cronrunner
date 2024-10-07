@@ -16,6 +16,7 @@
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Job {
-    Fingerprint(u64),
     Uid(usize),
+    Fingerprint(u64),
+    Tag(String),
 }

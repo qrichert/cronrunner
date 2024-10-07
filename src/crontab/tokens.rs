@@ -23,14 +23,21 @@ pub struct CronJob {
     /// `fingerprint` it is not guaranteed to be stable across runs. If
     /// the crontab changes between two runs, the same `uid` may target
     /// a different job(!). This is more user-friendly, however. (See
-    /// help text for `--safe` mode).
+    /// help text for `--safe` and `--tag` mode).
     pub uid: usize,
     /// Fingerprint (cronrunner-specific). This uniquely identifies a
     /// job, but contrary to `uid`, it is stable across runs. If the
     /// job changes between two runs (position or command changes), the
     /// fingerprint will be invalidated. This is safer, but less
-    /// user-friendly (See help text for `--safe` mode).
+    /// user-friendly (See help text for `--safe` and `--tag` mode).
     pub fingerprint: u64,
+    /// Tag (cronrunner-specific). This is a manual job identifier.
+    /// Contrary to `fingerprint`, a tag is stable even if the job
+    /// changes. This is great for scripts, but it does not guarantee
+    /// that the command remains the same. (See help text for `--safe`
+    /// and `--tag` mode). This is set by starting the job's description
+    /// by `%{...}`, where `...` can be anything but a closing bracket.
+    pub tag: Option<String>,
     /// The schedule of the job, as defined in the crontab. This value
     /// isn't used by [`Crontab`](super::Crontab).
     pub schedule: String,
@@ -124,6 +131,7 @@ mod tests {
         let cronjob = CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@hourly"),
             command: String::from("sleep 3599"),
             description: Some(JobDescription(String::from("Sleep (almost) forever."))),
@@ -140,6 +148,7 @@ mod tests {
         let cronjob = CronJob {
             uid: 1,
             fingerprint: 13_376_942,
+            tag: None,
             schedule: String::from("@hourly"),
             command: String::from("sleep 3599"),
             description: None,

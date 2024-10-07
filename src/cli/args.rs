@@ -26,6 +26,7 @@ pub struct Config {
     pub list_only: bool,
     pub as_json: bool,
     pub safe: bool,
+    pub tag: bool,
     pub detach: bool,
     pub job: Option<Job>,
 }
@@ -65,12 +66,20 @@ impl Config {
                 continue;
             }
 
+            if arg == "-t" || arg == "--tag" {
+                config.tag = true;
+                continue;
+            }
+
             if arg == "-d" || arg == "--detach" {
                 config.detach = true;
                 continue;
             }
 
-            if config.safe {
+            if config.tag {
+                config.job = Some(Job::Tag(arg));
+                break;
+            } else if config.safe {
                 // Check for fingerprint.
                 if let Ok(job) = u64::from_str_radix(&arg, 16) {
                     #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
@@ -88,7 +97,11 @@ impl Config {
                 }
             }
 
-            return Err(arg);
+            return Err(format!("unexpected argument '{arg}'"));
+        }
+
+        if config.tag && config.job.is_none() {
+            return Err(String::from("option '--tag' requires a tag"));
         }
 
         Ok(config)
@@ -108,6 +121,7 @@ Options:
   -l, --list-only      List available jobs and exit.
       --as-json        Render `--list-only` as JSON.
   -s, --safe           Use job fingerprints.
+  -t, --tag <TAG>      Run specific tag.
   -d, --detach         Run job in the background.
 ",
         description = env!("CARGO_PKG_DESCRIPTION"),
@@ -141,8 +155,8 @@ Examples:
       {highlight}${reset} _
 
 Extras:
-  Comments that start with two hashes (##) and immediately precede
-  a job are used as description for that job.
+  Comments that start with two hashes (`##`) and immediately precede
+  a job are used as a description for that job.
 
       {comment}## Say hello.{reset}
       {schedule}@hourly{reset} {command}echo \"hello\"{reset}
@@ -151,7 +165,7 @@ Extras:
 
       {highlight}1.{reset} Say hello. {attenuate}@hourly echo \"hello\"{reset}
 
-  Comments that start with three hashes (###) are used as section
+  Comments that start with three hashes (`###`) are used as section
   headers, up until a new section starts or up until the end.
 
       {comment}### Housekeeping{reset}
@@ -175,6 +189,20 @@ Safe mode:
   by a fingerprint. This is less user-friendly, but if the jobs get
   reordered, or if the command changes, that fingerprint will be
   invalidated and the run will fail.
+
+  Or, you could tag a specific job and run it with `--tag`. Tags are
+  stable even if the underlying job changes. This is great for scripts,
+  but it does not guarantee that the command remains the same.
+
+  To define a tag, add a description comment starting with `%{{...}}`:
+
+      {comment}## %{{my-tag}} Scriptable job.{reset}
+      {schedule}@reboot{reset} {command}/usr/bin/bash ~/startup.sh{reset}
+
+  Then you can run it like this:
+
+      {highlight}${reset} {bin} --tag my-tag
+      Running...
 ",
         help = help_message(),
         bin = env!("CARGO_BIN_NAME"),
@@ -192,10 +220,10 @@ pub fn version_message() -> String {
     format!("{} {}", env!("CARGO_BIN_NAME"), env!("CARGO_PKG_VERSION"))
 }
 
-pub fn unexpected_argument_error_message(arg: &str) -> String {
+pub fn bad_arguments_error_message(reason: &str) -> String {
     format!(
         "\
-{error} unexpected argument '{arg}'.
+{error} {reason}.
 Try '{bin} -h' for help.",
         error = ui::Color::error("Error:"),
         bin = env!("CARGO_BIN_NAME"),
@@ -218,6 +246,7 @@ mod tests {
                 list_only: false,
                 as_json: false,
                 safe: false,
+                tag: false,
                 detach: false,
                 job: None,
             }
@@ -250,18 +279,18 @@ mod tests {
         ]
         .into_iter();
 
-        let config = Config::build_from_args(args).unwrap_err();
+        let err = Config::build_from_args(args).unwrap_err();
 
-        assert_eq!(config, "--unknown");
+        assert_eq!(err, "unexpected argument '--unknown'");
     }
 
     #[test]
     fn unexpected_argument_message_contains_argument_and_help() {
-        let message = unexpected_argument_error_message("--unexpected");
+        let message = bad_arguments_error_message("<reason>");
 
         dbg!(&message);
         assert!(message.contains("Error:"));
-        assert!(message.contains("--unexpected"));
+        assert!(message.contains("<reason>"));
         assert!(message.contains("-h"));
     }
 
@@ -304,6 +333,7 @@ mod tests {
         assert!(message.contains("-l, --list-only"));
         assert!(message.contains("--as-json"));
         assert!(message.contains("-s, --safe"));
+        assert!(message.contains("-t, --tag"));
         assert!(message.contains("-d, --detach"));
     }
 
@@ -526,6 +556,66 @@ mod tests {
 
         assert!(config.safe);
         assert!(matches!(config.job, Some(Job::Fingerprint(78_719))));
+    }
+
+    #[test]
+    fn argument_tag() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--tag"),
+            String::from("my-tag"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.tag);
+        assert_eq!(config.job.unwrap(), Job::Tag(String::from("my-tag")));
+    }
+
+    #[test]
+    fn argument_tag_shorthand() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("-t"),
+            String::from("your-tag"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.tag);
+        assert_eq!(config.job.unwrap(), Job::Tag(String::from("your-tag")));
+    }
+
+    #[test]
+    fn argument_tag_continues_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--tag"),
+            String::from("--detach"),
+            String::from("taginou"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.tag);
+        assert!(config.detach);
+        assert_eq!(config.job.unwrap(), Job::Tag(String::from("taginou")));
+    }
+
+    #[test]
+    fn argument_tag_not_followed_by_tag() {
+        let args = [
+            String::from("/usr/local/bin/cronrunner"),
+            String::from("--tag"),
+        ]
+        .into_iter();
+
+        let err = Config::build_from_args(args).unwrap_err();
+
+        assert_eq!(err, "option '--tag' requires a tag");
     }
 
     #[test]

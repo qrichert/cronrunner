@@ -64,6 +64,7 @@ impl Parser {
     ///     vec![Token::CronJob(CronJob {
     ///         uid: 1,
     ///         fingerprint: 6_917_582_312_284_972_245,
+    ///         tag: None,
     ///         schedule: String::from("@hourly"),
     ///         command: String::from("echo ':)'"),
     ///         description: None,
@@ -132,7 +133,8 @@ impl Parser {
         }
 
         let previous_token = state.tokens.last();
-        let description = Self::get_job_description_if_any(previous_token);
+        let mut description = Self::get_job_description_if_any(previous_token);
+        let tag = Self::extract_tag_from_job_description(&mut description);
 
         let uid = state.job_uid;
         let fingerprint = hash::djb2(format!("uid({uid}),command({command})"));
@@ -140,6 +142,7 @@ impl Parser {
         Ok(Token::CronJob(CronJob {
             uid,
             fingerprint,
+            tag,
             schedule,
             command,
             description,
@@ -236,6 +239,40 @@ impl Parser {
             }
         }
         None
+    }
+
+    /// Extract tag from a description comment (if any).
+    ///
+    /// A description comment can start with a tag. A tag is opened by
+    /// `%{`, and closed by the first `}` encountered. If the comment
+    /// does not start with `%{`, or does not contain `}`, nothing will
+    /// be extracted.
+    ///
+    /// Tags are used as stable identification for jobs. This is very
+    /// useful if cronrunner is used in scripts.
+    ///
+    /// This is cronrunner specific, and has nothing to do with Cron
+    /// itself.
+    fn extract_tag_from_job_description(
+        job_description: &mut Option<JobDescription>,
+    ) -> Option<String> {
+        if !job_description
+            .as_ref()
+            .is_some_and(|desc| desc.0.starts_with("%{") && desc.0.contains('}'))
+        {
+            return None;
+        }
+        let description = job_description.take().expect("it is 'Some'");
+        let (tag, description) = description.0.split_once('}').expect("it contains '}'");
+
+        let description = description.trim_start();
+        if !description.is_empty() {
+            let description = JobDescription(description.to_string());
+            _ = job_description.insert(description);
+        }
+
+        let tag = tag[2..].to_string(); // '%{'
+        Some(tag)
     }
 
     /// Extract section comment from a token (if any).
@@ -380,6 +417,7 @@ impl Parser {
 mod tests {
     use super::*;
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn regular_crontab() {
         let tokens = Parser::parse(
@@ -420,6 +458,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 17_695_356_924_205_779_724,
+                    tag: None,
                     schedule: String::from("@reboot"),
                     command: String::from("/usr/bin/bash ~/startup.sh"),
                     description: None,
@@ -442,6 +481,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 2,
                     fingerprint: 8_740_762_385_512_907_025,
+                    tag: None,
                     schedule: String::from("30 20 * * *"),
                     command: String::from(
                         "/usr/local/bin/brew update && /usr/local/bin/brew upgrade"
@@ -464,6 +504,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 3,
                     fingerprint: 17_118_619_922_108_271_534,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("echo $FOO"),
                     description: Some(JobDescription(String::from("Print variable."))),
@@ -479,6 +520,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 4,
                     fingerprint: 15_438_538_048_322_941_730,
+                    tag: None,
                     schedule: String::from("@reboot"),
                     command: String::from(":"),
                     description: None,
@@ -505,6 +547,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -513,6 +556,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 2,
                     fingerprint: 4_461_213_176_276_726_319,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -521,6 +565,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 3,
                     fingerprint: 6_015_366_411_386_091_056,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -647,6 +692,124 @@ mod tests {
         assert_eq!(job.uid, 2);
         assert_eq!(job.fingerprint, 6_767_435_073_018_149_136);
         assert_eq!(job.command, "printf 'hello, goodbye'");
+    }
+
+    #[test]
+    fn tag_is_extracted_from_description_regular() {
+        let tokens = Parser::parse(
+            "
+            ## %{tag} Job description
+            @daily printf 'hello, world'
+            ",
+        );
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Comment(Comment {
+                    value: String::from("%{tag} Job description"),
+                    kind: CommentKind::Description
+                }),
+                Token::CronJob(CronJob {
+                    uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
+                    tag: Some(String::from("tag")),
+                    schedule: String::from("@daily"),
+                    command: String::from("printf 'hello, world'"),
+                    description: Some(JobDescription(String::from("Job description"))),
+                    section: None,
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn tag_is_extracted_from_description_no_whitespace() {
+        let tokens = Parser::parse(
+            "
+            ##%{tag}Job description
+            @daily printf 'hello, world'
+            ",
+        );
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Comment(Comment {
+                    value: String::from("%{tag}Job description"),
+                    kind: CommentKind::Description
+                }),
+                Token::CronJob(CronJob {
+                    uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
+                    tag: Some(String::from("tag")),
+                    schedule: String::from("@daily"),
+                    command: String::from("printf 'hello, world'"),
+                    description: Some(JobDescription(String::from("Job description"))),
+                    section: None,
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn tag_is_extracted_from_description_weird_characters() {
+        let tokens = Parser::parse(
+            "
+            ## %{[{é&ù°àé \\3}]}Job description
+            @daily printf 'hello, world'
+            ",
+        );
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Comment(Comment {
+                    value: String::from("%{[{é&ù°àé \\3}]}Job description"),
+                    kind: CommentKind::Description
+                }),
+                Token::CronJob(CronJob {
+                    uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
+                    tag: Some(String::from("[{é&ù°àé \\3")),
+                    schedule: String::from("@daily"),
+                    command: String::from("printf 'hello, world'"),
+                    // It's only up until the first `}`.
+                    description: Some(JobDescription(String::from("]}Job description"))),
+                    section: None,
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn tag_is_extracted_from_description_leaves_description_empty() {
+        let tokens = Parser::parse(
+            "
+            ## %{tag}
+            @daily printf 'hello, world'
+            ",
+        );
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Comment(Comment {
+                    value: String::from("%{tag}"),
+                    kind: CommentKind::Description
+                }),
+                Token::CronJob(CronJob {
+                    uid: 1,
+                    fingerprint: 2_907_059_941_167_361_582,
+                    tag: Some(String::from("tag")),
+                    schedule: String::from("@daily"),
+                    command: String::from("printf 'hello, world'"),
+                    // It's only up until the first `}`.
+                    description: None,
+                    section: None,
+                })
+            ]
+        );
     }
 
     #[test]
@@ -799,6 +962,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: Some(JobDescription(String::from("Job description"))),
@@ -822,6 +986,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -840,6 +1005,7 @@ mod tests {
             vec![Token::CronJob(CronJob {
                 uid: 1,
                 fingerprint: 2_907_059_941_167_361_582,
+                tag: None,
                 schedule: String::from("* * * * *"),
                 command: String::from("printf 'hello, world'"),
                 description: None,
@@ -900,6 +1066,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -911,6 +1078,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 2,
                     fingerprint: 4_461_213_176_276_726_319,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -937,6 +1105,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -965,6 +1134,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -981,6 +1151,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 2,
                     fingerprint: 4_461_213_176_276_726_319,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -996,6 +1167,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 3,
                     fingerprint: 6_015_366_411_386_091_056,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1026,6 +1198,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1038,6 +1211,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 2,
                     fingerprint: 4_461_213_176_276_726_319,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1053,6 +1227,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 3,
                     fingerprint: 6_015_366_411_386_091_056,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1103,6 +1278,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1118,6 +1294,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 2,
                     fingerprint: 4_461_213_176_276_726_319,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1133,6 +1310,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 3,
                     fingerprint: 6_015_366_411_386_091_056,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1163,6 +1341,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1175,6 +1354,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 2,
                     fingerprint: 4_461_213_176_276_726_319,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1190,6 +1370,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 3,
                     fingerprint: 6_015_366_411_386_091_056,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1228,6 +1409,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 2_907_059_941_167_361_582,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: Some(JobDescription(String::from("Job description"))),
@@ -1239,6 +1421,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 2,
                     fingerprint: 4_461_213_176_276_726_319,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'hello, world'"),
                     description: None,
@@ -1270,6 +1453,7 @@ mod tests {
                 Token::CronJob(CronJob {
                     uid: 1,
                     fingerprint: 1_621_249_689_450_973_832,
+                    tag: None,
                     schedule: String::from("* * * * *"),
                     command: String::from("printf 'buongiorno'"),
                     description: None,
