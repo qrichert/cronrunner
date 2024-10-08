@@ -1,6 +1,6 @@
 [package]
 name = "cronrunner"
-version = "2.10.0"
+version = "2.11.0"
 edition = "2021"
 authors = ["Quentin Richert <noreply@richert.co>"]
 description = "Run cron jobs manually."
@@ -9,6 +9,10 @@ repository = "https://github.com/qrichert/cronrunner.git"
 readme = "README.md"
 keywords = ["cron", "crontab", "cli"]
 categories = ["command-line-utilities"]
+
+[[bin]]
+name = "cr"
+path = "src/main.rs"
 
 [profile.release]
 strip = true

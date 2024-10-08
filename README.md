@@ -33,7 +33,7 @@ FOO=:)
 ```
 Run cron jobs manually.
 
-Usage: cronrunner [OPTIONS] [ID]
+Usage: cr [OPTIONS] [ID]
 
 Options:
   -h, --help           Show this message and exit.
@@ -51,7 +51,7 @@ If you know the ID of a job, you can run it directly:
 
 ```console
 # Run job number 1.
-$ cronrunner 1
+$ cr 1
 Running...
 ```
 
@@ -59,7 +59,7 @@ If the job takes a long time to run, you can detach it:
 
 ```console
 # Prints the PID and exits.
-$ cronrunner --detach 3
+$ cr --detach 3
 1337
 $ _
 ```
@@ -67,7 +67,7 @@ $ _
 ### Extras
 
 Comments that start with two hashes (`##`) and immediately precede a job
-are used as a description for that job.
+are used as the description for that job.
 
 ```crontab
 ## Say hello.
@@ -124,7 +124,7 @@ To define a tag, add a description comment starting with `%{...}`:
 Then you can run it like this:
 
 ```console
-$ cronrunner --tag my-tag
+$ cr --tag my-tag
 Running...
 ```
 
@@ -133,9 +133,8 @@ Running...
 ### Directly
 
 ```console
-$ wget https://github.com/qrichert/cronrunner/releases/download/X.X.X/cronrunner-X.X.X-xxx
-$ sudo install ./cronrunner-* /usr/local/bin/cronrunner
-$ sudo ln -s /usr/local/bin/cronrunner /usr/local/bin/cr
+$ wget https://github.com/qrichert/cronrunner/releases/download/X.X.X/cr-X.X.X-xxx
+$ sudo install ./cr-* /usr/local/bin/cr
 ```
 
 ### Manual Build
