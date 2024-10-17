@@ -217,7 +217,7 @@ Safe mode:
 }
 
 pub fn version_message() -> String {
-    format!("{} {}", env!("CARGO_BIN_NAME"), env!("CARGO_PKG_VERSION"))
+    format!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
 }
 
 pub fn bad_arguments_error_message(reason: &str) -> String {
@@ -405,11 +405,11 @@ mod tests {
     }
 
     #[test]
-    fn version_message_contains_binary_name_and_version() {
+    fn version_message_contains_package_name_and_version() {
         let message = version_message();
 
         dbg!(&message);
-        assert!(message.contains(env!("CARGO_BIN_NAME")));
+        assert!(message.contains(env!("CARGO_PKG_NAME")));
         assert!(message.contains(env!("CARGO_PKG_VERSION")));
     }
 
