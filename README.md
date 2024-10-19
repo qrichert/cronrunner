@@ -128,6 +128,15 @@ $ cr --tag my-tag
 Running...
 ```
 
+### Tips
+
+If you have jobs you only want to execute manually, you can schedule
+them to run on February 31st:
+
+```crontab
+0 0 31 2 * echo "I never run on my own!"
+```
+
 ## Installation
 
 ### Directly

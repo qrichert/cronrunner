@@ -203,11 +203,22 @@ Safe mode:
 
       {highlight}${reset} {bin} --tag my-tag
       Running...
+
+Tips:
+  If you have jobs you only want to execute manually, you can schedule
+  them to run on February 31st:
+
+      {min}0{reset} {h}0{reset} {d}31{reset} {mon}2{reset} {dow}*{reset} {command}echo \"I never run on my own!\"{reset}
 ",
         help = help_message(),
         bin = env!("CARGO_BIN_NAME"),
         comment = ui::Color::maybe_color("\x1b[96m"),
         schedule = ui::Color::maybe_color("\x1b[38;5;224m"),
+        min = ui::Color::maybe_color("\x1b[95m"),
+        h = ui::Color::maybe_color("\x1b[38;5;81m"),
+        d = ui::Color::maybe_color("\x1b[38;5;121m"),
+        mon = ui::Color::maybe_color("\x1b[95m"),
+        dow = ui::Color::maybe_color("\x1b[96m"),
         command = ui::Color::maybe_color("\x1b[93m"),
         title = ui::Color::maybe_color(ui::TITLE),
         highlight = ui::Color::maybe_color(ui::HIGHLIGHT),
