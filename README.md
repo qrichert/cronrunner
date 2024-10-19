@@ -131,7 +131,7 @@ Running...
 ### Tips
 
 If you have jobs you only want to execute manually, you can schedule
-them to run on February 31st:
+them to run on February 31<sup>st</sup>:
 
 ```crontab
 0 0 31 2 * echo "I never run on my own!"
