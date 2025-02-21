@@ -169,7 +169,7 @@ fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>, use_fingerprint: bool) -> V
         } else {
             format_job_uid(job.uid, max_id_width)
         };
-        let description = format_job_description(&job.description);
+        let description = format_job_description(job.description.as_ref());
         let schedule = format_job_schedule(&job.schedule);
         let command = format_job_command(&job.command, !description.is_empty());
 
@@ -216,7 +216,7 @@ fn format_job_uid(uid: usize, max_uid_width: usize) -> String {
     ui::Color::highlight(&format!("{uid:>max_uid_width$}."))
 }
 
-fn format_job_description(description: &Option<JobDescription>) -> String {
+fn format_job_description(description: Option<&JobDescription>) -> String {
     if let Some(description) = description {
         format!("{description} ")
     } else {
@@ -414,8 +414,12 @@ mod tests {
         assert_eq!(
             entries,
             vec![
-                String::from("\u{1b}[0;92m1.\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'hello, world'"),
-                String::from("\u{1b}[0;92m2.\u{1b}[0m This job has a description \u{1b}[0;90m@monthly\u{1b}[0m \u{1b}[0;90mecho 'buongiorno'\u{1b}[0m"),
+                String::from(
+                    "\u{1b}[0;92m1.\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'hello, world'"
+                ),
+                String::from(
+                    "\u{1b}[0;92m2.\u{1b}[0m This job has a description \u{1b}[0;90m@monthly\u{1b}[0m \u{1b}[0;90mecho 'buongiorno'\u{1b}[0m"
+                ),
             ]
         );
     }
@@ -448,8 +452,12 @@ mod tests {
         assert_eq!(
             entries,
             vec![
-                String::from("\u{1b}[0;92mcc1dae\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'hello, world'"),
-                String::from("\u{1b}[0;92m12d687\u{1b}[0m This job has a description \u{1b}[0;90m@monthly\u{1b}[0m \u{1b}[0;90mecho 'buongiorno'\u{1b}[0m"),
+                String::from(
+                    "\u{1b}[0;92mcc1dae\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'hello, world'"
+                ),
+                String::from(
+                    "\u{1b}[0;92m12d687\u{1b}[0m This job has a description \u{1b}[0;90m@monthly\u{1b}[0m \u{1b}[0;90mecho 'buongiorno'\u{1b}[0m"
+                ),
             ]
         );
     }

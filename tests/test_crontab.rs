@@ -2,7 +2,7 @@ mod utils;
 
 use std::env;
 
-use cronrunner::crontab::{make_instance, RunResultDetail};
+use cronrunner::crontab::{RunResultDetail, make_instance};
 use cronrunner::reader::{ReadError, ReadErrorDetail, Reader};
 use cronrunner::tokens::{Comment, CommentKind, CronJob, Token, Variable};
 
