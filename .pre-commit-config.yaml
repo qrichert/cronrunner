@@ -24,7 +24,7 @@ repos:
         types: [rust]
         entry: cargo doc --no-deps --all-features
         pass_filenames: false
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+  - repo: https://github.com/rbubley/mirrors-prettier
+    rev: v3.5.1
     hooks:
       - id: prettier
