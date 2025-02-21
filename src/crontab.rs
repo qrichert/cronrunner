@@ -356,6 +356,7 @@ impl Crontab {
 
     fn determine_shell_to_use(env: &mut HashMap<String, String>) -> String {
         if let Some(shell) = env.remove("SHELL") {
+            // Set explicitly in Crontab's env.
             shell
         } else {
             String::from(DEFAULT_SHELL)
@@ -364,6 +365,7 @@ impl Crontab {
 
     fn determine_home_to_use(env: &mut HashMap<String, String>) -> Result<String, String> {
         if let Some(home) = env.remove("HOME") {
+            // Set explicitly in Crontab's env.
             Ok(home)
         } else {
             Ok(Self::get_home_directory()?)
@@ -371,6 +373,7 @@ impl Crontab {
     }
 
     fn get_home_directory() -> Result<String, String> {
+        // TODO: Use `std::env::home_dir()` once it gets un-deprecated.
         if let Ok(home_directory) = env::var("HOME") {
             Ok(home_directory)
         } else {
