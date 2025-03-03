@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::path::PathBuf;
+
 use super::job::Job;
 use super::ui;
 
@@ -28,6 +30,7 @@ pub struct Config {
     pub safe: bool,
     pub tag: bool,
     pub detach: bool,
+    pub env_file: Option<PathBuf>,
     pub job: Option<Job>,
 }
 
@@ -35,7 +38,8 @@ impl Config {
     pub fn build_from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
         let mut config = Self::default();
 
-        for arg in args.skip(1) {
+        let mut iter = args.skip(1);
+        while let Some(arg) = iter.next() {
             if arg == "-h" {
                 config.help = true;
                 break;
@@ -75,6 +79,14 @@ impl Config {
                 config.detach = true;
                 continue;
             }
+
+            if arg == "-e" || arg == "--env" {
+                let Some(file) = iter.next().map(PathBuf::from) else {
+                    return Err(format!("expected file path after '{arg}'"));
+                };
+                config.env_file = Some(file);
+                continue;
+            };
 
             if config.tag {
                 config.job = Some(Job::Tag(arg));
@@ -123,6 +135,7 @@ Options:
   -s, --safe           Use job fingerprints.
   -t, --tag <TAG>      Run specific tag.
   -d, --detach         Run job in the background.
+  -e, --env <FILE>     Override job environment.
 ",
         description = env!("CARGO_PKG_DESCRIPTION"),
         bin = env!("CARGO_BIN_NAME"),
@@ -204,6 +217,20 @@ Safe mode:
       {highlight}${reset} {bin} --tag my-tag
       Running...
 
+Environment:
+  Cron runs jobs in a very minimalistic environment, which you may want
+  to replicate. The content of this environment is platform-specific and
+  can vary a lot. The best way to capture it accurately is to export it
+  directly from Cron. To do this, let Cron run this job once:
+
+      {min}*{reset} {h}*{reset} {d}*{reset} {mon}*{reset} {dow}*{reset} {command}env > ~/.cron.env{reset}
+
+  Then, you can tell {package} to use this file as the environment for
+  the child process:
+
+      {highlight}${reset} {bin} --env ~/.cron.env 3
+      Running...
+
 Tips:
   If you have jobs you only want to execute manually, you can schedule
   them to run on February 31st:
@@ -212,6 +239,7 @@ Tips:
 ",
         help = help_message(),
         bin = env!("CARGO_BIN_NAME"),
+        package = env!("CARGO_PKG_NAME"),
         comment = ui::Color::maybe_color("\x1b[96m"),
         schedule = ui::Color::maybe_color("\x1b[38;5;224m"),
         min = ui::Color::maybe_color("\x1b[95m"),
@@ -259,6 +287,7 @@ mod tests {
                 safe: false,
                 tag: false,
                 detach: false,
+                env_file: None,
                 job: None,
             }
         );
@@ -338,6 +367,7 @@ mod tests {
         assert!(message.contains("-s, --safe"));
         assert!(message.contains("-t, --tag"));
         assert!(message.contains("-d, --detach"));
+        assert!(message.contains("-e, --env <FILE>"));
     }
 
     #[test]
@@ -620,6 +650,67 @@ mod tests {
 
         assert!(config.detach);
         assert!(matches!(config.job, Some(Job::Uid(42))));
+    }
+
+    #[test]
+    fn argument_env() {
+        let args = [
+            String::from("/usr/local/bin/cr"),
+            String::from("--env"),
+            String::from("~/.cron.env"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(
+            config
+                .env_file
+                .is_some_and(|contents| contents == PathBuf::from("~/.cron.env"))
+        );
+    }
+
+    #[test]
+    fn argument_env_shorthand() {
+        let args = [
+            String::from("/usr/local/bin/cr"),
+            String::from("-e"),
+            String::from("~/.cron.env"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(
+            config
+                .env_file
+                .is_some_and(|contents| contents == PathBuf::from("~/.cron.env"))
+        );
+    }
+
+    #[test]
+    fn argument_env_continues_after_match() {
+        let args = [
+            String::from("/usr/local/bin/cr"),
+            String::from("--env"),
+            String::from("~/.cron.env"),
+            String::from("42"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.env_file.is_some());
+        assert!(matches!(config.job, Some(Job::Uid(42))));
+    }
+
+    #[test]
+    fn argument_env_requires_file() {
+        let args = [String::from("/usr/local/bin/cr"), String::from("--env")].into_iter();
+
+        let err = Config::build_from_args(args).unwrap_err();
+
+        assert_eq!(err, "expected file path after '--env'");
     }
 
     #[test]

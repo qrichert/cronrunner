@@ -3,8 +3,6 @@
 /// _DJB2_[^1] is a very lightweight hash function, with rare collisions
 /// and good distribution[^2], created by Daniel J. Bernstein.
 ///
-/// # See Also
-///
 /// [^1]: <http://www.cse.yorku.ca/~oz/hash.html#djb2>
 /// [^2]: <https://softwareengineering.stackexchange.com/a/145633>
 pub fn djb2(input: impl AsRef<[u8]>) -> u64 {

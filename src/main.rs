@@ -16,8 +16,10 @@
 
 mod cli;
 
+use std::collections::HashMap;
 use std::env;
 use std::io::{self, IsTerminal, Write};
+use std::path::PathBuf;
 
 use cronrunner::crontab::{self, RunResult, RunResultDetail};
 use cronrunner::reader::{ReadError, ReadErrorDetail};
@@ -45,10 +47,21 @@ fn main() -> ExitStatus {
         return ExitStatus::Success;
     }
 
-    let crontab = match crontab::make_instance() {
+    // Failing to parse the env file is considered an argument error,
+    // thus it must come before other program logic.
+    let env = match try_parse_env_file_if_given(config.env_file.as_ref()) {
+        Ok(env) => env,
+        Err(error) => return exit_from_env_file_parse_error(&error),
+    };
+
+    let mut crontab = match crontab::make_instance() {
         Ok(crontab) => crontab,
         Err(error) => return exit_from_crontab_read_error(&error),
     };
+    if let Some(env) = env {
+        crontab.set_env(env);
+    }
+
     if !crontab.has_runnable_jobs() {
         return exit_from_no_runnable_jobs();
     }
@@ -102,6 +115,44 @@ fn main() -> ExitStatus {
 fn exit_from_arguments_error(arg: &str) -> ExitStatus {
     eprintln!("{}", args::bad_arguments_error_message(arg));
     ExitStatus::ArgsError
+}
+
+fn try_parse_env_file_if_given(
+    env_file: Option<&PathBuf>,
+) -> Result<Option<HashMap<String, String>>, String> {
+    let Some(env_file) = env_file else {
+        return Ok(None); // Not given.
+    };
+
+    if !env_file.is_file() {
+        return Err(format!("'{}' does not exist.", env_file.display()));
+    }
+    let Ok(env) = std::fs::read_to_string(env_file) else {
+        #[cfg(not(tarpaulin_include))] // Hard to make reading fail.
+        return Err(format!("'{}' could not be read.", &env_file.display()));
+    };
+
+    let env: HashMap<String, String> = env
+        .lines()
+        .filter_map(|line| {
+            let (variable, value) = line.trim().split_once('=')?;
+            // Skip special variables.
+            if ["SHLVL", "_"].contains(&variable) {
+                return None;
+            }
+            Some((variable.to_string(), value.to_string()))
+        })
+        .collect();
+
+    Ok(Some(env))
+}
+
+fn exit_from_env_file_parse_error(reason: &str) -> ExitStatus {
+    eprintln!(
+        "{}\n{reason}",
+        ui::Color::error("Error parsing environment file.")
+    );
+    ExitStatus::Failure
 }
 
 fn exit_from_crontab_read_error(error: &ReadError) -> ExitStatus {
@@ -307,6 +358,8 @@ fn exit_from_run_result(result: RunResult) -> ExitStatus {
 mod tests {
     use super::*;
 
+    const FIXTURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/");
+
     #[test]
     fn exit_from_arguments_error_regular() {
         let arg = "--unknown";
@@ -314,6 +367,15 @@ mod tests {
         let exit_code = exit_from_arguments_error(arg);
 
         assert_eq!(exit_code, ExitStatus::ArgsError);
+    }
+
+    #[test]
+    fn exit_from_env_file_parse_error_regular() {
+        let reason = "'/dev/null' does not exist";
+
+        let exit_code = exit_from_env_file_parse_error(reason);
+
+        assert_eq!(exit_code, ExitStatus::Failure);
     }
 
     #[test]
@@ -356,6 +418,58 @@ mod tests {
         let exit_code = exit_from_crontab_read_error(&error);
 
         assert_eq!(exit_code, ExitStatus::Failure);
+    }
+
+    #[test]
+    fn try_parse_env_file_if_given_regular() {
+        let file = PathBuf::from(FIXTURES_DIR).join("cron.env");
+
+        let env = try_parse_env_file_if_given(Some(&file)).unwrap().unwrap();
+
+        assert_eq!(
+            env,
+            HashMap::from([
+                (String::from("FOO"), String::from("bar")),
+                (String::from("BAZ"), String::from("42")),
+            ])
+        );
+    }
+
+    #[test]
+    fn try_parse_env_file_if_given_empty_file() {
+        let file = PathBuf::from(FIXTURES_DIR).join("cron.env.empty");
+
+        let env = try_parse_env_file_if_given(Some(&file)).unwrap().unwrap();
+
+        assert_eq!(env, HashMap::new());
+    }
+
+    #[test]
+    fn try_parse_env_file_if_given_removes_special_variables() {
+        let file = PathBuf::from(FIXTURES_DIR).join("cron.env");
+
+        let env = try_parse_env_file_if_given(Some(&file)).unwrap().unwrap();
+
+        assert!(!env.contains_key("SHLVL"));
+        assert!(!env.contains_key("_"));
+    }
+
+    #[test]
+    fn try_parse_env_file_if_given_not_given() {
+        let file = None;
+
+        let res = try_parse_env_file_if_given(file);
+
+        assert!(matches!(res, Ok(None)));
+    }
+
+    #[test]
+    fn try_parse_env_file_if_given_file_does_not_exist() {
+        let file = PathBuf::from(FIXTURES_DIR).join("does-not-exist");
+
+        let err = try_parse_env_file_if_given(Some(&file)).unwrap_err();
+
+        assert_eq!(err, format!("'{}' does not exist.", file.display()));
     }
 
     #[test]

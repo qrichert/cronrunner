@@ -44,6 +44,7 @@ Options:
   -s, --safe           Use job fingerprints.
   -t, --tag <TAG>      Run specific tag.
   -d, --detach         Run job in the background.
+  -e, --env <FILE>     Override job environment.
 ```
 
 ### Examples
@@ -129,10 +130,29 @@ $ cr --tag my-tag
 Running...
 ```
 
+### Environment
+
+Cron runs jobs in a very minimalistic environment, which you may want to
+replicate. The content of this environment is platform-specific and can
+vary a lot. The best way to capture it accurately is to export it
+directly from Cron. To do this, let Cron run this job once:
+
+```crontab
+* * * * * env > ~/.cron.env
+```
+
+Then, you can tell cronrunner to use this file as the environment for
+the child process:
+
+```console
+$ cr --env ~/.cron.env 3
+Running...
+```
+
 ### Tips
 
 If you have jobs you only want to execute manually, you can schedule
-them to run on February 31st:
+them to run on February 31<sup>st</sup>:
 
 ```crontab
 0 0 31 2 * echo "I never run on my own!"

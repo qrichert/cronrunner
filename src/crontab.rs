@@ -76,12 +76,13 @@ pub struct RunResult {
 #[derive(Debug)]
 pub struct Crontab {
     pub tokens: Vec<Token>,
+    env: Option<HashMap<String, String>>,
 }
 
 impl Crontab {
     #[must_use]
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens }
+        Self { tokens, env: None }
     }
 
     /// Whether there are jobs in the crontab at all.
@@ -138,7 +139,49 @@ impl Crontab {
             .find(|job| job.tag.as_ref().is_some_and(|job_tag| job_tag == tag))
     }
 
+    /// Override `Crontab`'s default inherited environment.
+    ///
+    /// By default, jobs are run inheriting the env from the parent
+    /// process. This method lets you set a custom environment instead.
+    ///
+    /// <div class="warning">
+    ///
+    /// Environments are not additive. The job's env is _replaced_ by
+    /// `env`, and not merged with it. If you want to merge the envs,
+    /// you will have to do that yourself beforehand.
+    ///
+    /// </div>
+    ///
+    /// Note that `set_env()` has no effect on variables declared inside
+    /// the crontab or those set on a per-job basis. It only overrides
+    /// the default parent-process-inherited environment.
+    ///
+    /// This requires the `Crontab` instance to be _mutable_.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use std::collections::HashMap;
+    /// # use cronrunner::crontab::Crontab;
+    /// # let mut crontab: Crontab = Crontab::new(Vec::new());
+    /// // let mut crontab = crontab::make_instance()?;
+    ///
+    /// crontab.set_env(HashMap::from([
+    ///     (String::from("FOO"), String::from("bar")),
+    ///     (String::from("BAZ"), String::from("42")),
+    /// ]));
+    ///
+    /// // let res = crontab.run(/* ... */);
+    /// ```
+    pub fn set_env(&mut self, env: HashMap<String, String>) {
+        self.env = Some(env);
+    }
+
     /// Run a job.
+    ///
+    /// By default, the job inherits the environment from the parent
+    /// process. Use [`Crontab::set_env()`] to set a custom environment
+    /// instead.
     ///
     /// # Examples
     ///
@@ -291,8 +334,11 @@ impl Crontab {
 
         let mut command = Command::new(shell_command.shell);
 
+        if let Some(env) = self.env.as_ref() {
+            command.env_clear().envs(env);
+        };
+
         command
-            // .env_clear() // TODO: Cleaner env?
             .envs(&shell_command.env)
             .current_dir(shell_command.home)
             .arg("-c")
@@ -340,6 +386,7 @@ impl Crontab {
 
     fn determine_shell_to_use(env: &mut HashMap<String, String>) -> String {
         if let Some(shell) = env.remove("SHELL") {
+            // Set explicitly in Crontab's env.
             shell
         } else {
             String::from(DEFAULT_SHELL)
@@ -348,6 +395,7 @@ impl Crontab {
 
     fn determine_home_to_use(env: &mut HashMap<String, String>) -> Result<String, String> {
         if let Some(home) = env.remove("HOME") {
+            // Set explicitly in Crontab's env.
             Ok(home)
         } else {
             Ok(Self::get_home_directory()?)
@@ -355,6 +403,7 @@ impl Crontab {
     }
 
     fn get_home_directory() -> Result<String, String> {
+        // TODO: Use `std::env::home_dir()` once it gets un-deprecated.
         if let Ok(home_directory) = env::var("HOME") {
             Ok(home_directory)
         } else {
@@ -846,6 +895,34 @@ mod tests {
             HashMap::from([(String::from("FOO"), String::from("bar"))])
         );
         assert_eq!(command.command, "df -h > ~/track_disk_usage.txt");
+    }
+
+    #[test]
+    fn set_env() {
+        let mut crontab = Crontab::new(Vec::new());
+
+        assert!(crontab.env.is_none());
+
+        crontab.set_env(HashMap::from([(String::from("FOO"), String::from("bar"))]));
+
+        assert!(
+            crontab.env.is_some_and(
+                |env| env == HashMap::from([(String::from("FOO"), String::from("bar"))])
+            )
+        );
+    }
+
+    #[test]
+    fn set_env_replaces_previous_one() {
+        let mut crontab = Crontab::new(Vec::new());
+
+        let env1 = HashMap::from([(String::from("FOO"), String::from("bar"))]);
+        let env2 = HashMap::from([(String::from("BAZ"), String::from("42"))]);
+
+        crontab.set_env(env1);
+        crontab.set_env(env2.clone());
+
+        assert!(crontab.env.is_some_and(|env| env == env2));
     }
 
     #[test]

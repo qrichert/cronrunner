@@ -10,6 +10,8 @@ SHELL=mock_shell
 ## First job.
 @hourly echo "Job numero uno"
 
+FOO=miam
+
 ## Second job.
 @daily echo ":)"
 

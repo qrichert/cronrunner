@@ -40,7 +40,7 @@ pub fn mock_crontab(file: &str) {
     }
 }
 
-/// "Monkey-patch" the crontab executable.
+/// "Monkey-patch" the shell executable.
 ///
 /// This works exactly like [`mock_crontab()`], but in this case it sets
 /// up a fake shell.

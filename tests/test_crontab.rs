@@ -1,5 +1,6 @@
 mod utils;
 
+use std::collections::HashMap;
 use std::env;
 
 use cronrunner::crontab::{RunResultDetail, make_instance};
@@ -142,6 +143,95 @@ fn run_job_detached_error_other_reason() {
             reason: String::from("The given job is not in the crontab.")
         }
     );
+}
+
+#[test]
+fn run_job_with_custom_env() {
+    mock_crontab("crontab_runnable_jobs");
+    mock_shell("output_env_to_file");
+
+    // `PATH` is overridden too, so we need to manually persist it.
+    let path = env::var("PATH").expect("set in `mock_shell()`");
+
+    let mut crontab = make_instance().unwrap();
+
+    crontab.set_env(HashMap::from([
+        (String::from("FOO"), String::from("bar")),
+        (String::from("BAZ"), String::from("42")),
+        (String::from("PATH"), path),
+    ]));
+
+    let job = crontab.get_job_from_uid(1).unwrap();
+
+    let res = crontab.run(job);
+
+    assert!(res.was_successful);
+
+    let output = read_output_file("output_env");
+
+    dbg!(&output);
+    assert!(output.contains("FOO=bar"));
+    assert!(output.contains("BAZ=42"));
+    assert!(output.contains("PATH=") && output.contains("/mock_bin/:/bin:/usr/bin/"));
+}
+
+#[test]
+fn run_job_with_custom_env_crontab_variables_have_precedence() {
+    mock_crontab("crontab_runnable_jobs");
+    mock_shell("output_env_to_file");
+
+    // `PATH` is overridden too, so we need to manually persist it.
+    let path = env::var("PATH").expect("set in `mock_shell()`");
+
+    let mut crontab = make_instance().unwrap();
+
+    crontab.set_env(HashMap::from([
+        (String::from("FOO"), String::from("bar")),
+        (String::from("BAZ"), String::from("42")),
+        (String::from("PATH"), path),
+    ]));
+
+    // Second job has `FOO=miam` set, which first job does not.
+    let job = crontab.get_job_from_uid(2).unwrap();
+
+    let res = crontab.run(job);
+
+    assert!(res.was_successful);
+
+    let output = read_output_file("output_env");
+
+    dbg!(&output);
+    assert!(output.contains("FOO=miam")); // Crontab has precedence.
+    assert!(output.contains("BAZ=42")); // From `set_env()`.
+}
+
+#[test]
+fn run_job_with_custom_env_parent_env_does_not_leak_into_set_env() {
+    mock_crontab("crontab_runnable_jobs");
+    mock_shell("output_env_to_file");
+
+    // `PATH` is overridden too, so we need to manually persist it.
+    let path = env::var("PATH").expect("set in `mock_shell()`");
+
+    unsafe {
+        env::set_var("CRONRUNNER_TEST", "1337");
+    }
+
+    let mut crontab = make_instance().unwrap();
+
+    crontab.set_env(HashMap::from([(String::from("PATH"), path)]));
+
+    // Second job has `FOO=miam` set, which first job does not.
+    let job = crontab.get_job_from_uid(1).unwrap();
+
+    let res = crontab.run(job);
+
+    assert!(res.was_successful);
+
+    let output = read_output_file("output_env");
+
+    dbg!(&output);
+    assert!(!output.contains("CRONRUNNER_TEST=1337"));
 }
 
 #[test]
