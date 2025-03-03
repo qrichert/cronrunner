@@ -149,6 +149,16 @@ $ cr --env ~/.cron.env 3
 Running...
 ```
 
+### Configuration
+
+Some arguments have corresponding environment variables, allowing you to
+set values permanently in a shell startup file (e.g., `~/.bashrc`).
+
+```
+--safe        CRONRUNNER_SAFE=1
+--env <FILE>  CRONRUNNER_ENV=<FILE>
+```
+
 ### Tips
 
 If you have jobs you only want to execute manually, you can schedule

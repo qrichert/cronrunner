@@ -38,6 +38,8 @@ impl Config {
     pub fn build_from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
         let mut config = Self::default();
 
+        Self::pre_populate_from_env(&mut config);
+
         let mut iter = args.skip(1);
         while let Some(arg) = iter.next() {
             if arg == "-h" {
@@ -117,6 +119,23 @@ impl Config {
         }
 
         Ok(config)
+    }
+
+    /// Pre-populate `Config` with values from the environment.
+    ///
+    /// Some CLI arguments have environment counterparts, whose purpose
+    /// is to make long term configuration simpler.
+    ///
+    /// For example, it's much nicer to export `CRONRUNNER_ENV=<file>`
+    /// once in the `~/.bashrc` than to add `--env <file>` to every
+    /// command.
+    fn pre_populate_from_env(config: &mut Self) {
+        if std::env::var_os("CRONRUNNER_SAFE").is_some() {
+            config.safe = true;
+        }
+        if let Some(env_file) = std::env::var_os("CRONRUNNER_ENV").filter(|f| !f.is_empty()) {
+            config.env_file = Some(PathBuf::from(env_file));
+        }
     }
 }
 
@@ -231,6 +250,13 @@ Environment:
       {highlight}${reset} {bin} --env ~/.cron.env 3
       Running...
 
+Configuration:
+  Some arguments have corresponding environment variables, allowing you
+  to set values permanently in a shell startup file (e.g., `~/.bashrc`).
+
+      --safe        CRONRUNNER_SAFE=1
+      --env <FILE>  CRONRUNNER_ENV=<FILE>
+
 Tips:
   If you have jobs you only want to execute manually, you can schedule
   them to run on February 31st:
@@ -272,7 +298,7 @@ Try '{bin} -h' for help.",
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::iter;
+    use std::{env, iter};
 
     #[test]
     fn default_config() {
@@ -564,6 +590,25 @@ mod tests {
     }
 
     #[test]
+    fn argument_safe_from_env() {
+        unsafe {
+            env::set_var("CRONRUNNER_SAFE", "");
+        }
+
+        let args = iter::once(String::from("/usr/local/bin/cr"));
+
+        let config = Config::build_from_args(args).unwrap();
+
+        // If we don't remove it, it will make tests expecting it to be
+        // `false` fail (remove _before_ `assert` returns early).
+        unsafe {
+            env::remove_var("CRONRUNNER_SAFE");
+        }
+
+        assert!(config.safe);
+    }
+
+    #[test]
     fn argument_tag() {
         let args = [
             String::from("/usr/local/bin/cr"),
@@ -711,6 +756,48 @@ mod tests {
         let err = Config::build_from_args(args).unwrap_err();
 
         assert_eq!(err, "expected file path after '--env'");
+    }
+
+    #[test]
+    fn argument_env_file_from_env() {
+        unsafe {
+            env::set_var("CRONRUNNER_ENV", "~/.cron.env");
+        }
+
+        let args = iter::once(String::from("/usr/local/bin/cr"));
+
+        let config = Config::build_from_args(args).unwrap();
+
+        // If we don't remove it, it will make tests expecting it to be
+        // `false` fail (remove _before_ `assert` returns early).
+        unsafe {
+            env::remove_var("CRONRUNNER_ENV");
+        }
+
+        assert!(
+            config
+                .env_file
+                .is_some_and(|contents| contents == PathBuf::from("~/.cron.env"))
+        );
+    }
+
+    #[test]
+    fn argument_env_file_from_env_empty_file_name_is_ignored() {
+        unsafe {
+            env::set_var("CRONRUNNER_ENV", "");
+        }
+
+        let args = iter::once(String::from("/usr/local/bin/cr"));
+
+        let config = Config::build_from_args(args).unwrap();
+
+        // If we don't remove it, it will make tests expecting it to be
+        // `false` fail (remove _before_ `assert` returns early).
+        unsafe {
+            env::remove_var("CRONRUNNER_ENV");
+        }
+
+        assert!(config.env_file.is_none());
     }
 
     #[test]
