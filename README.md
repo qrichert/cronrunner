@@ -1,6 +1,7 @@
 # cronrunner
 
-[![license: GPL v3+](https://img.shields.io/badge/license-GPLv3+-blue)](https://www.gnu.org/licenses/gpl-3.0)
+[![license (bin): GPL v3+](https://img.shields.io/badge/license-GPLv3+-blue)](https://www.gnu.org/licenses/gpl-3.0)
+[![license (lib): MIT](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/license/mit)
 ![GitHub Tag](https://img.shields.io/github/v/tag/qrichert/cronrunner?sort=semver&filter=*.*.*&label=release)
 [![crates.io](https://img.shields.io/crates/d/cronrunner?logo=rust&logoColor=white&color=orange)](https://crates.io/crates/cronrunner)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/qrichert/cronrunner/run-tests.yml?label=tests)](https://github.com/qrichert/cronrunner/actions)
@@ -163,6 +164,17 @@ $ sudo make install
 cargo install cronrunner
 cargo install --git https://github.com/qrichert/cronrunner.git
 ```
+
+## License
+
+This project is dual-licensed:
+
+- The **binary** as a product is licensed under GPLv3+.
+- The **library** is available under the MIT license.
+
+If you are using only the library in your own projects, you may use it
+under the MIT license. However, if you are redistributing the binary or
+a modified version of it, you must comply with GPLv3+.
 
 [^1]:
     cronrunner used to be a Python project, see
