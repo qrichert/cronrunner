@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+# This crontab is a valid crontab with many edge cases.
+
 # `mock_shell` is what lets us monkey-patch the shell. It makes
 # `Crontab` run `mock_shell` instead of the default `/bin/sh`, which
 # will be added to the `PATH` in the tests' setup.

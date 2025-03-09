@@ -17,7 +17,7 @@ use crate::utils::{mock_crontab, mock_shell, read_output_file};
 // available at no extra cost.
 #[test]
 fn correct_argument_is_passed_to_crontab() {
-    mock_crontab("output_args");
+    mock_crontab("crontab_output_args");
 
     let crontab = Reader::read().unwrap();
 
@@ -28,7 +28,7 @@ fn correct_argument_is_passed_to_crontab() {
 #[test]
 fn run_job_success() {
     mock_crontab("crontab_runnable_jobs");
-    mock_shell("do_nothing");
+    mock_shell("shell_do_nothing");
 
     let crontab = make_instance().unwrap();
     let job = crontab.get_job_from_uid(2).unwrap();
@@ -42,7 +42,7 @@ fn run_job_success() {
 #[test]
 fn run_job_detached_success() {
     mock_crontab("crontab_runnable_jobs");
-    mock_shell("do_nothing");
+    mock_shell("shell_do_nothing");
 
     let crontab = make_instance().unwrap();
     let job = crontab.get_job_from_uid(2).unwrap();
@@ -148,7 +148,7 @@ fn run_job_detached_error_other_reason() {
 #[test]
 fn run_job_with_custom_env() {
     mock_crontab("crontab_runnable_jobs");
-    mock_shell("output_env_to_file");
+    mock_shell("shell_output_env_to_file");
 
     // `PATH` is overridden too, so we need to manually persist it.
     let path = env::var("PATH").expect("set in `mock_shell()`");
@@ -178,7 +178,7 @@ fn run_job_with_custom_env() {
 #[test]
 fn run_job_with_custom_env_crontab_variables_have_precedence() {
     mock_crontab("crontab_runnable_jobs");
-    mock_shell("output_env_to_file");
+    mock_shell("shell_output_env_to_file");
 
     // `PATH` is overridden too, so we need to manually persist it.
     let path = env::var("PATH").expect("set in `mock_shell()`");
@@ -208,7 +208,7 @@ fn run_job_with_custom_env_crontab_variables_have_precedence() {
 #[test]
 fn run_job_with_custom_env_parent_env_does_not_leak_into_set_env() {
     mock_crontab("crontab_runnable_jobs");
-    mock_shell("output_env_to_file");
+    mock_shell("shell_output_env_to_file");
 
     // `PATH` is overridden too, so we need to manually persist it.
     let path = env::var("PATH").expect("set in `mock_shell()`");
@@ -237,7 +237,7 @@ fn run_job_with_custom_env_parent_env_does_not_leak_into_set_env() {
 #[test]
 fn correct_job_is_run() {
     mock_crontab("crontab_runnable_jobs");
-    mock_shell("output_args_to_file");
+    mock_shell("shell_output_args_to_file");
 
     let crontab = make_instance().unwrap();
     let job = crontab.get_job_from_uid(2).unwrap();
@@ -254,7 +254,7 @@ fn correct_job_is_run() {
 #[test]
 fn edge_cases_with_variables() {
     mock_crontab("crontab_variables_edge_cases");
-    mock_shell("output_stdout_stderr_to_file");
+    mock_shell("shell_output_stdout_stderr_to_file");
 
     let crontab = make_instance().unwrap();
     let job = crontab.get_job_from_uid(1).unwrap();
@@ -378,7 +378,7 @@ fn make_instance_success() {
 
 #[test]
 fn make_instance_error_reading_crontab() {
-    mock_crontab("exit_non_zero");
+    mock_crontab("crontab_exit_non_zero");
 
     let crontab = make_instance();
     let error = crontab.unwrap_err();
