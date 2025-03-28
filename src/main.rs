@@ -260,11 +260,11 @@ fn format_job_section(section: &JobSection) -> String {
 }
 
 fn format_job_fingerprint(fingerprint: u64, max_uid_width: usize) -> String {
-    ui::Color::highlight(&format!("{fingerprint:0>max_uid_width$x}"))
+    ui::Color::highlight(&format!("{fingerprint:0>max_uid_width$x}")).into_owned()
 }
 
 fn format_job_uid(uid: usize, max_uid_width: usize) -> String {
-    ui::Color::highlight(&format!("{uid:>max_uid_width$}."))
+    ui::Color::highlight(&format!("{uid:>max_uid_width$}.")).into_owned()
 }
 
 fn format_job_description(description: Option<&JobDescription>) -> String {
@@ -276,12 +276,12 @@ fn format_job_description(description: Option<&JobDescription>) -> String {
 }
 
 fn format_job_schedule(schedule: &str) -> String {
-    ui::Color::attenuate(schedule)
+    ui::Color::attenuate(schedule).into_owned()
 }
 
 fn format_job_command(command: &str, has_description: bool) -> String {
     if has_description {
-        ui::Color::attenuate(command)
+        ui::Color::attenuate(command).into_owned()
     } else {
         String::from(command)
     }

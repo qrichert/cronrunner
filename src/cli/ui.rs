@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::borrow::Cow;
 use std::env;
 use std::sync::LazyLock;
 
@@ -27,10 +28,7 @@ pub static NO_COLOR: LazyLock<bool> = LazyLock::new(|| {
     }
     // Contrary to `env::var()`, `env::var_os()` does not require the
     // value to be valid Unicode.
-    match env::var_os("NO_COLOR") {
-        Some(value) => !value.is_empty(),
-        None => false,
-    }
+    env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty())
 });
 
 pub const ERROR: &str = "\x1b[0;91m";
@@ -43,22 +41,22 @@ pub struct Color;
 
 impl Color {
     #[must_use]
-    pub fn error(string: &str) -> String {
+    pub fn error(string: &str) -> Cow<str> {
         Self::color(ERROR, string)
     }
 
     #[must_use]
-    pub fn highlight(string: &str) -> String {
+    pub fn highlight(string: &str) -> Cow<str> {
         Self::color(HIGHLIGHT, string)
     }
 
     #[must_use]
-    pub fn attenuate(string: &str) -> String {
+    pub fn attenuate(string: &str) -> Cow<str> {
         Self::color(ATTENUATE, string)
     }
 
     #[must_use]
-    pub fn title(string: &str) -> String {
+    pub fn title(string: &str) -> Cow<str> {
         Self::color(TITLE, string)
     }
 
@@ -72,12 +70,12 @@ impl Color {
     /// the returned string will be equal to the input string, no color
     /// gets added.
     #[must_use]
-    fn color(color: &str, string: &str) -> String {
+    fn color<'a>(color: &str, string: &'a str) -> Cow<'a, str> {
         if *NO_COLOR {
             #[cfg(not(tarpaulin_include))] // Unreachable in tests.
-            return string.into();
+            return Cow::Borrowed(string);
         }
-        format!("{color}{string}{RESET}")
+        Cow::Owned(format!("{color}{string}{RESET}"))
     }
 
     /// Return input color, or nothing in no-color mode.
