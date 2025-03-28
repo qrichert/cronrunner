@@ -27,10 +27,7 @@ pub static NO_COLOR: LazyLock<bool> = LazyLock::new(|| {
     }
     // Contrary to `env::var()`, `env::var_os()` does not require the
     // value to be valid Unicode.
-    match env::var_os("NO_COLOR") {
-        Some(value) => !value.is_empty(),
-        None => false,
-    }
+    env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty())
 });
 
 pub const ERROR: &str = "\x1b[0;91m";
