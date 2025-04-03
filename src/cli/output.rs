@@ -85,6 +85,7 @@ impl Pager {
             // Use short args for better compatibility.
             pager.arg("-R"); // `--RAW-CONTROL-CHARS` Do not render ANSI sequences as text.
             pager.arg("-F"); // `--quit-if-one-screen` Do not page if the entire output fits on the screen.
+            pager.arg("-X"); // `--no-init` Leave content on screen after exit.
         }
 
         let mut child = pager.spawn()?;
