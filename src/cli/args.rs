@@ -86,9 +86,12 @@ impl Config {
                 let Some(file) = iter.next().map(PathBuf::from) else {
                     return Err(format!("expected file path after '{arg}'"));
                 };
-                config.env_file = Some(file);
-                continue;
-            };
+                #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
+                {
+                    config.env_file = Some(file);
+                    continue;
+                }
+            }
 
             if config.tag {
                 config.job = Some(Job::Tag(arg));

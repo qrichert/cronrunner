@@ -19,7 +19,6 @@ use std::env;
 use std::sync::LazyLock;
 
 /// `true` if `NO_COLOR` is set and is non-empty.
-#[cfg(not(tarpaulin_include))]
 #[allow(unreachable_code)]
 pub static NO_COLOR: LazyLock<bool> = LazyLock::new(|| {
     #[cfg(test)]

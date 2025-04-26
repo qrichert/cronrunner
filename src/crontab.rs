@@ -298,6 +298,7 @@ impl Crontab {
             Err(res) => return res,
         };
 
+        #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
         let child = command
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -332,19 +333,22 @@ impl Crontab {
             }
         };
 
-        let mut command = Command::new(shell_command.shell);
+        #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
+        {
+            let mut command = Command::new(shell_command.shell);
 
-        if let Some(env) = self.env.as_ref() {
-            command.env_clear().envs(env);
-        };
+            if let Some(env) = self.env.as_ref() {
+                command.env_clear().envs(env);
+            }
 
-        command
-            .envs(&shell_command.env)
-            .current_dir(shell_command.home)
-            .arg("-c")
-            .arg(shell_command.command);
+            command
+                .envs(&shell_command.env)
+                .current_dir(shell_command.home)
+                .arg("-c")
+                .arg(shell_command.command);
 
-        Ok(command)
+            Ok(command)
+        }
     }
 
     fn make_shell_command(&self, job: &CronJob) -> Result<ShellCommand, String> {

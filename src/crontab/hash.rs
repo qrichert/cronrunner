@@ -5,6 +5,7 @@
 ///
 /// [^1]: <http://www.cse.yorku.ca/~oz/hash.html#djb2>
 /// [^2]: <https://softwareengineering.stackexchange.com/a/145633>
+#[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
 pub fn djb2(input: impl AsRef<[u8]>) -> u64 {
     let mut hash: u64 = 5381;
     for byte in input.as_ref() {
