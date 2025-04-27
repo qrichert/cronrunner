@@ -34,7 +34,7 @@ FOO=:)
 ```
 Run cron jobs manually.
 
-Usage: cr [OPTIONS] [ID]
+Usage: crn [OPTIONS] [ID]
 
 Options:
   -h, --help           Show this message and exit.
@@ -53,7 +53,7 @@ If you know the ID of a job, you can run it directly:
 
 ```console
 # Run job number 1.
-$ cr 1
+$ crn 1
 Running...
 ```
 
@@ -61,7 +61,7 @@ If the job takes a long time to run, you can detach it:
 
 ```console
 # Prints the PID and exits.
-$ cr --detach 3
+$ crn --detach 3
 1337
 $ _
 ```
@@ -126,7 +126,7 @@ To define a tag, add a description comment starting with `%{...}`:
 Then you can run it like this:
 
 ```console
-$ cr --tag my-tag
+$ crn --tag my-tag
 Running...
 ```
 
@@ -145,7 +145,7 @@ Then, you can tell cronrunner to use this file as the environment for
 the child process:
 
 ```console
-$ cr --env ~/.cron.env 3
+$ crn --env ~/.cron.env 3
 Running...
 ```
 
@@ -173,8 +173,8 @@ them to run on February 31<sup>st</sup>:
 ### Directly
 
 ```console
-$ wget https://github.com/qrichert/cronrunner/releases/download/X.X.X/cr-X.X.X-xxx
-$ sudo install ./cr-* /usr/local/bin/cr
+$ wget https://github.com/qrichert/cronrunner/releases/download/X.X.X/crn-X.X.X-xxx
+$ sudo install ./crn-* /usr/local/bin/crn
 ```
 
 ### Manual Build

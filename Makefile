@@ -90,7 +90,7 @@ coverage-pct: ## Ensure code coverage of 100%
 .PHONY: install
 install: ## Install cronrunner
 	install -d $(PREFIX)/bin/
-	install ./target/release/cr $(PREFIX)/bin/cr
+	install ./target/release/crn $(PREFIX)/bin/crn
 
 %:
 	@$(call show_error_message,Unknown command '$@')

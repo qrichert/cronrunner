@@ -1,6 +1,6 @@
 [package]
 name = "cronrunner"
-version = "2.13.0"
+version = "2.14.0"
 edition = "2024"
 authors = ["Quentin Richert <noreply@richert.co>"]
 description = "Run cron jobs manually."
@@ -11,7 +11,7 @@ keywords = ["cron", "crontab", "cli"]
 categories = ["command-line-utilities"]
 
 [[bin]]
-name = "cr"
+name = "crn"
 path = "src/main.rs"
 
 [profile.release]

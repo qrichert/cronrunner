@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn no_arguments_because_first_is_skipped() {
-        let args = iter::once(String::from("/usr/local/bin/cr"));
+        let args = iter::once(String::from("/usr/local/bin/crn"));
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -342,7 +342,11 @@ mod tests {
 
     #[test]
     fn unexpected_argument() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("--unknown")].into_iter();
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--unknown"),
+        ]
+        .into_iter();
 
         let err = Config::build_from_args(args).unwrap_err();
 
@@ -361,7 +365,7 @@ mod tests {
 
     #[test]
     fn argument_help() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("-h")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("-h")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -372,7 +376,7 @@ mod tests {
     #[test]
     fn argument_help_stops_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("-h"),
             String::from("--unknown"),
         ]
@@ -410,7 +414,7 @@ mod tests {
 
     #[test]
     fn argument_long_help() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("--help")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("--help")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -421,7 +425,7 @@ mod tests {
     #[test]
     fn argument_long_help_stops_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--help"),
             String::from("--unknown"),
         ]
@@ -444,7 +448,11 @@ mod tests {
 
     #[test]
     fn argument_version() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("--version")].into_iter();
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--version"),
+        ]
+        .into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -453,7 +461,7 @@ mod tests {
 
     #[test]
     fn argument_version_shorthand() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("-v")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("-v")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -463,7 +471,7 @@ mod tests {
     #[test]
     fn argument_version_stops_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--version"),
             String::from("--unknown"),
         ]
@@ -486,7 +494,7 @@ mod tests {
     #[test]
     fn argument_list_only() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--list-only"),
         ]
         .into_iter();
@@ -498,7 +506,7 @@ mod tests {
 
     #[test]
     fn argument_list_only_shorthand() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("-l")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("-l")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -508,7 +516,7 @@ mod tests {
     #[test]
     fn argument_list_only_continues_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--list-only"),
             String::from("--safe"),
         ]
@@ -522,7 +530,11 @@ mod tests {
 
     #[test]
     fn argument_as_json() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("--as-json")].into_iter();
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--as-json"),
+        ]
+        .into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -532,7 +544,7 @@ mod tests {
     #[test]
     fn argument_as_json_continues_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--as-json"),
             String::from("--safe"),
         ]
@@ -547,7 +559,7 @@ mod tests {
     #[test]
     fn argument_as_json_implicitly_activates_list_only() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--list-only"),
             String::from("--as-json"),
         ]
@@ -561,7 +573,7 @@ mod tests {
 
     #[test]
     fn argument_safe() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("--safe")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("--safe")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -570,7 +582,7 @@ mod tests {
 
     #[test]
     fn argument_safe_shorthand() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("-s")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("-s")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -580,7 +592,7 @@ mod tests {
     #[test]
     fn argument_safe_continues_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--safe"),
             String::from("1337f"),
         ]
@@ -598,7 +610,7 @@ mod tests {
             env::set_var("CRONRUNNER_SAFE", "");
         }
 
-        let args = iter::once(String::from("/usr/local/bin/cr"));
+        let args = iter::once(String::from("/usr/local/bin/crn"));
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -614,7 +626,7 @@ mod tests {
     #[test]
     fn argument_tag() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--tag"),
             String::from("my-tag"),
         ]
@@ -629,7 +641,7 @@ mod tests {
     #[test]
     fn argument_tag_shorthand() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("-t"),
             String::from("your-tag"),
         ]
@@ -644,7 +656,7 @@ mod tests {
     #[test]
     fn argument_tag_continues_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--tag"),
             String::from("--detach"),
             String::from("taginou"),
@@ -660,7 +672,7 @@ mod tests {
 
     #[test]
     fn argument_tag_not_followed_by_tag() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("--tag")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("--tag")].into_iter();
 
         let err = Config::build_from_args(args).unwrap_err();
 
@@ -669,7 +681,7 @@ mod tests {
 
     #[test]
     fn argument_detach() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("--detach")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("--detach")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -678,7 +690,7 @@ mod tests {
 
     #[test]
     fn argument_detach_shorthand() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("-d")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("-d")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -688,7 +700,7 @@ mod tests {
     #[test]
     fn argument_detach_continues_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--detach"),
             String::from("42"),
         ]
@@ -703,7 +715,7 @@ mod tests {
     #[test]
     fn argument_env() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--env"),
             String::from("~/.cron.env"),
         ]
@@ -721,7 +733,7 @@ mod tests {
     #[test]
     fn argument_env_shorthand() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("-e"),
             String::from("~/.cron.env"),
         ]
@@ -739,7 +751,7 @@ mod tests {
     #[test]
     fn argument_env_continues_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("--env"),
             String::from("~/.cron.env"),
             String::from("42"),
@@ -754,7 +766,7 @@ mod tests {
 
     #[test]
     fn argument_env_requires_file() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("--env")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("--env")].into_iter();
 
         let err = Config::build_from_args(args).unwrap_err();
 
@@ -767,7 +779,7 @@ mod tests {
             env::set_var("CRONRUNNER_ENV", "~/.cron.env");
         }
 
-        let args = iter::once(String::from("/usr/local/bin/cr"));
+        let args = iter::once(String::from("/usr/local/bin/crn"));
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -790,7 +802,7 @@ mod tests {
             env::set_var("CRONRUNNER_ENV", "");
         }
 
-        let args = iter::once(String::from("/usr/local/bin/cr"));
+        let args = iter::once(String::from("/usr/local/bin/crn"));
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -805,7 +817,7 @@ mod tests {
 
     #[test]
     fn argument_job() {
-        let args = [String::from("/usr/local/bin/cr"), String::from("42")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("42")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
@@ -815,7 +827,7 @@ mod tests {
     #[test]
     fn argument_job_stops_after_match() {
         let args = [
-            String::from("/usr/local/bin/cr"),
+            String::from("/usr/local/bin/crn"),
             String::from("42"),
             String::from("--version"),
         ]
