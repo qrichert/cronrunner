@@ -3,6 +3,7 @@
 [![license (bin): GPL v3+](https://img.shields.io/badge/license-GPLv3+-blue)](https://www.gnu.org/licenses/gpl-3.0)
 [![license (lib): MIT](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/license/mit)
 ![GitHub Tag](https://img.shields.io/github/v/tag/qrichert/cronrunner?sort=semver&filter=*.*.*&label=release)
+[![tokei (loc)](https://tokei.rs/b1/github/qrichert/cronrunner?label=loc&style=flat)](https://github.com/XAMPPRocky/tokei)
 [![crates.io](https://img.shields.io/crates/d/cronrunner?logo=rust&logoColor=white&color=orange)](https://crates.io/crates/cronrunner)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/qrichert/cronrunner/run-tests.yml?label=tests)](https://github.com/qrichert/cronrunner/actions)
 
