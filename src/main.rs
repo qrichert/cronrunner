@@ -149,14 +149,18 @@ fn try_parse_env_file_if_given(
 
 fn exit_from_env_file_parse_error(reason: &str) -> ExitStatus {
     eprintln!(
-        "{}\n{reason}",
-        ui::Color::error("Error parsing environment file.")
+        "{error}: Error parsing environment file.\n{reason}",
+        error = ui::Color::error("error"),
     );
     ExitStatus::Failure
 }
 
 fn exit_from_crontab_read_error(error: &ReadError) -> ExitStatus {
-    eprintln!("{}", ui::Color::error(error.reason));
+    eprintln!(
+        "{error}: {}",
+        error.reason,
+        error = ui::Color::error("error")
+    );
 
     if let ReadErrorDetail::NonZeroExit { exit_code, stderr } = &error.detail {
         if let Some(stderr) = stderr {
@@ -329,7 +333,10 @@ fn parse_user_job_selection(job_selected: &str, use_fingerprint: bool) -> Result
 }
 
 fn exit_from_invalid_job_selection() -> ExitStatus {
-    eprintln!("{}", ui::Color::error("Invalid job selection."));
+    eprintln!(
+        "{error}: Invalid job selection.",
+        error = ui::Color::error("error")
+    );
     ExitStatus::Failure
 }
 
@@ -340,7 +347,7 @@ fn exit_from_run_result(result: RunResult) -> ExitStatus {
 
     match result.detail {
         RunResultDetail::DidNotRun { reason } => {
-            eprintln!("{}", ui::Color::error(&reason));
+            eprintln!("{error}: {reason}", error = ui::Color::error("error"));
             ExitStatus::Failure
         }
         RunResultDetail::DidRun { exit_code: None } => ExitStatus::Failure,

@@ -84,7 +84,7 @@ impl Config {
 
             if arg == "-e" || arg == "--env" {
                 let Some(file) = iter.next().map(PathBuf::from) else {
-                    return Err(format!("expected file path after '{arg}'"));
+                    return Err(format!("Expected file path after '{arg}'"));
                 };
                 #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
                 {
@@ -114,11 +114,11 @@ impl Config {
                 }
             }
 
-            return Err(format!("unexpected argument '{arg}'"));
+            return Err(format!("Unexpected argument '{arg}'"));
         }
 
         if config.tag && config.job.is_none() {
-            return Err(String::from("option '--tag' requires a tag"));
+            return Err(String::from("Option '--tag' requires a tag"));
         }
 
         Ok(config)
@@ -291,9 +291,9 @@ pub fn version_message() -> String {
 pub fn bad_arguments_error_message(reason: &str) -> String {
     format!(
         "\
-{error} {reason}.
+{error}: {reason}.
 Try '{bin} -h' for help.",
-        error = ui::Color::error("Error:"),
+        error = ui::Color::error("error"),
         bin = env!("CARGO_BIN_NAME"),
     )
 }
@@ -350,7 +350,7 @@ mod tests {
 
         let err = Config::build_from_args(args).unwrap_err();
 
-        assert_eq!(err, "unexpected argument '--unknown'");
+        assert_eq!(err, "Unexpected argument '--unknown'");
     }
 
     #[test]
@@ -358,7 +358,7 @@ mod tests {
         let message = bad_arguments_error_message("<reason>");
 
         dbg!(&message);
-        assert!(message.contains("Error:"));
+        assert!(message.contains("error"));
         assert!(message.contains("<reason>"));
         assert!(message.contains("-h"));
     }
@@ -676,7 +676,7 @@ mod tests {
 
         let err = Config::build_from_args(args).unwrap_err();
 
-        assert_eq!(err, "option '--tag' requires a tag");
+        assert_eq!(err, "Option '--tag' requires a tag");
     }
 
     #[test]
@@ -770,7 +770,7 @@ mod tests {
 
         let err = Config::build_from_args(args).unwrap_err();
 
-        assert_eq!(err, "expected file path after '--env'");
+        assert_eq!(err, "Expected file path after '--env'");
     }
 
     #[test]
