@@ -8,6 +8,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::fmt::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use self::parser::Parser;
@@ -21,7 +22,7 @@ const DEFAULT_SHELL: &str = "/bin/sh";
 struct ShellCommand {
     env: HashMap<String, String>,
     shell: String,
-    home: String,
+    home: PathBuf,
     command: String,
 }
 
@@ -397,23 +398,20 @@ impl Crontab {
         }
     }
 
-    fn determine_home_to_use(env: &mut HashMap<String, String>) -> Result<String, String> {
+    fn determine_home_to_use(env: &mut HashMap<String, String>) -> Result<PathBuf, String> {
         if let Some(home) = env.remove("HOME") {
             // Set explicitly in Crontab's env.
-            Ok(home)
+            Ok(PathBuf::from(home))
         } else {
             Ok(Self::get_home_directory()?)
         }
     }
 
-    fn get_home_directory() -> Result<String, String> {
-        // TODO: Use `std::env::home_dir()` once it gets un-deprecated.
-        if let Ok(home_directory) = env::var("HOME") {
+    fn get_home_directory() -> Result<PathBuf, String> {
+        if let Some(home_directory) = env::home_dir() {
             Ok(home_directory)
         } else {
-            Err(String::from(
-                "Could not read Home directory from environment.",
-            ))
+            Err(String::from("Could not determine Home directory."))
         }
     }
 }
@@ -937,7 +935,7 @@ mod tests {
 
         let home_directory = Crontab::get_home_directory().unwrap();
 
-        assert_eq!(home_directory, "/home/<test>");
+        assert_eq!(home_directory.to_string_lossy(), "/home/<test>");
     }
 
     #[test]
@@ -1190,7 +1188,7 @@ mod tests {
         let job = crontab.get_job_from_uid(1).unwrap();
         let command = crontab.make_shell_command(job).unwrap();
 
-        assert_eq!(command.home, "/home/<default>");
+        assert_eq!(command.home.to_string_lossy(), "/home/<default>");
     }
 
     #[test]
@@ -1219,7 +1217,7 @@ mod tests {
         let command = crontab.make_shell_command(job).unwrap();
 
         assert_eq!(command.env, HashMap::new());
-        assert_eq!(command.home, "/home/<custom>");
+        assert_eq!(command.home.to_string_lossy(), "/home/<custom>");
         assert_eq!(command.command, "./cleanup.sh");
     }
 
@@ -1245,35 +1243,36 @@ mod tests {
         let command = crontab.make_shell_command(job).unwrap();
 
         assert!(!command.env.contains_key("HOME"));
-        assert_eq!(command.home, "/home/<custom>");
+        assert_eq!(command.home.to_string_lossy(), "/home/<custom>");
     }
 
-    #[test]
-    fn get_home_directory_error() {
-        unsafe {
-            env::remove_var("HOME");
-        }
-
-        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
-            uid: 1,
-            fingerprint: 13_376_942,
-            tag: None,
-            schedule: String::from("@reboot"),
-            command: String::from("/usr/bin/bash ~/startup.sh"),
-            description: None,
-            section: None,
-        })]);
-
-        let job = crontab.get_job_from_uid(1).unwrap();
-        let error = crontab.make_shell_command(job).unwrap_err();
-
-        assert_eq!(error, "Could not read Home directory from environment.");
-
-        // If we don't re-create it, other tests will fail.
-        unsafe {
-            env::set_var("HOME", "/home/<test>");
-        }
-    }
+    // Failure is too hard, and too platform-specific to provoke.
+    //#[test]
+    //fn get_home_directory_error() {
+    //    unsafe {
+    //        env::remove_var("HOME");
+    //    }
+    //
+    //    let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+    //        uid: 1,
+    //        fingerprint: 13_376_942,
+    //        tag: None,
+    //        schedule: String::from("@reboot"),
+    //        command: String::from("/usr/bin/bash ~/startup.sh"),
+    //        description: None,
+    //        section: None,
+    //    })]);
+    //
+    //    let job = crontab.get_job_from_uid(1).unwrap();
+    //    let error = crontab.make_shell_command(job).unwrap_err();
+    //
+    //    assert_eq!(error, "Could not read Home directory from environment.");
+    //
+    //    // If we don't re-create it, other tests will fail.
+    //    unsafe {
+    //        env::set_var("HOME", "/home/<test>");
+    //    }
+    //}
 
     #[test]
     fn double_home_change() {
@@ -1309,7 +1308,7 @@ mod tests {
         let job = crontab.get_job_from_uid(2).unwrap();
         let command = crontab.make_shell_command(job).unwrap();
 
-        assert_eq!(command.home, "/home/user2");
+        assert_eq!(command.home.to_string_lossy(), "/home/user2");
         assert_eq!(command.command, "echo 'I run is user2's Home!'");
     }
 
