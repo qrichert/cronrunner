@@ -19,7 +19,7 @@ mod cli;
 use std::collections::HashMap;
 use std::env;
 use std::io::{self, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cronrunner::crontab::{self, RunResult, RunResultDetail};
 use cronrunner::reader::{ReadError, ReadErrorDetail};
@@ -51,7 +51,12 @@ fn main() -> ExitStatus {
     // thus it must come before other program logic.
     let env = match try_parse_env_file_if_given(config.env_file.as_ref()) {
         Ok(env) => env,
-        Err(error) => return exit_from_env_file_parse_error(&error),
+        Err(error) => {
+            return exit_from_env_file_parse_error(
+                &config.env_file.expect("can't fail without a file"),
+                &error,
+            );
+        }
     };
 
     let mut crontab = match crontab::make_instance() {
@@ -147,10 +152,27 @@ fn try_parse_env_file_if_given(
     Ok(Some(env))
 }
 
-fn exit_from_env_file_parse_error(reason: &str) -> ExitStatus {
+fn exit_from_env_file_parse_error(env_file: &Path, reason: &str) -> ExitStatus {
     eprintln!(
-        "{error}: Error parsing environment file.\n{reason}",
+        "\
+{error}: Error parsing environment file.
+{reason}
+
+Hint:
+  You can export Cron's environment by temporarily adding this job
+  to the crontab, and letting Cron run it:
+
+      {min}*{reset} {h}*{reset} {d}*{reset} {mon}*{reset} {dow}*{reset} {command}env > {env_file}{reset}
+",
+env_file=env_file.display(),
         error = ui::Color::error("error"),
+        min = ui::Color::maybe_color("\x1b[95m"),
+        h = ui::Color::maybe_color("\x1b[38;5;81m"),
+        d = ui::Color::maybe_color("\x1b[38;5;121m"),
+        mon = ui::Color::maybe_color("\x1b[95m"),
+        dow = ui::Color::maybe_color("\x1b[96m"),
+        command = ui::Color::maybe_color("\x1b[93m"),
+        reset = ui::Color::maybe_color(ui::RESET),
     );
     ExitStatus::Failure
 }
@@ -378,9 +400,10 @@ mod tests {
 
     #[test]
     fn exit_from_env_file_parse_error_regular() {
+        let file = PathBuf::from("/dev/null");
         let reason = "'/dev/null' does not exist";
 
-        let exit_code = exit_from_env_file_parse_error(reason);
+        let exit_code = exit_from_env_file_parse_error(&file, reason);
 
         assert_eq!(exit_code, ExitStatus::Failure);
     }
