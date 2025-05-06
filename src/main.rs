@@ -355,10 +355,7 @@ fn parse_user_job_selection(job_selected: &str, use_fingerprint: bool) -> Result
 }
 
 fn exit_from_invalid_job_selection() -> ExitStatus {
-    eprintln!(
-        "{error}: Invalid job selection.",
-        error = ui::Color::error("error")
-    );
+    eprintln!("{}", ui::Color::error("Invalid job selection."));
     ExitStatus::Failure
 }
 
