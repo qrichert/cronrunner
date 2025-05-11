@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full tag annotation.
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/
+            ~/.cargo/git/
+            target/
+          key: ${{ runner.os }}-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-release-
+            ${{ runner.os }}-
+
+      - name: Build release binary
+        run: make build
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p dist/
+          bin=$(make ci-bin-name)
+          platform=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
+          cp "target/release/$bin" "dist/${bin}-${{ github.ref_name }}-${platform}"
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-${{ runner.os }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # `actions/checkout@v4` somehow transforms annotated tags into
+      # lightweight tags, which prevents us from reading release notes.
+      # This fetches annotated tags and overrides existing mangled tags.
+      - name: Fetch annotated tags
+        run: git fetch --tags --force
+
+      - name: Extract tag annotation
+        id: tag
+        run: |
+          title=$(git tag -l --format='%(contents:subject)' ${{ github.ref_name }})
+          body=$(git tag -l --format='%(contents:body)' ${{ github.ref_name }})
+          echo "title=$title" >> $GITHUB_OUTPUT
+          echo 'body<<EOF' >> $GITHUB_OUTPUT
+          echo "$body" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ steps.tag.outputs.title }}
+          body: ${{ steps.tag.outputs.body }}
+          files: |
+            artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

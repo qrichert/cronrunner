@@ -88,6 +88,10 @@ install: ## Install cronrunner
 	install -d $(PREFIX)/bin/
 	install ./target/release/crn $(PREFIX)/bin/crn
 
+.PHONY: ci-bin-name
+ci-bin-name:
+	@echo "crn"
+
 %:
 	@$(call show_error_message,Unknown command '$@')
 	@$(show_help_message)
