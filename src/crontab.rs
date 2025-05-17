@@ -115,7 +115,7 @@ impl Crontab {
     /// Whether a given job is in the crontab or not.
     #[must_use]
     pub fn has_job(&self, job: &CronJob) -> bool {
-        self.jobs().iter().any(|x| *x == job)
+        self.jobs().contains(&job)
     }
 
     /// Get a job object from its [`UID`](CronJob::uid).
