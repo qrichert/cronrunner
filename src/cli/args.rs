@@ -239,12 +239,19 @@ Safe mode:
       {highlight}${reset} {bin} --tag my-tag
       Running...
 
+Ignore jobs:
+  To ignore jobs, tag them with the special `%{{ignore}}` tag:
+
+      {comment}## %{{ignore}} Ignored job.{reset}
+      {schedule}@daily{reset} {command}/should/not/be/run/manually{reset}
+
 Environment:
   Cron runs jobs in a very minimalistic environment, which you may want
   to replicate. The content of this environment is platform-specific and
   can vary a lot. The best way to capture it accurately is to export it
   directly from Cron. To do this, let Cron run this job once:
 
+      {comment}## %{{ignore}}{reset}
       {min}*{reset} {h}*{reset} {d}*{reset} {mon}*{reset} {dow}*{reset} {command}env > ~/.cron.env{reset}
 
   Then, you can tell {package} to use this file as the environment for

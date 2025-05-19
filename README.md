@@ -131,6 +131,15 @@ $ crn --tag my-tag
 Running...
 ```
 
+### Ignore jobs
+
+To ignore jobs, tag them with the special `%{ignore}` tag:
+
+```crontab
+## %{ignore} Ignored job.
+@daily /should/not/be/run/manually
+```
+
 ### Environment
 
 Cron runs jobs in a very minimalistic environment, which you may want to
@@ -139,6 +148,7 @@ vary a lot. The best way to capture it accurately is to export it
 directly from Cron. To do this, let Cron run this job once:
 
 ```crontab
+## %{ignore}
 * * * * * env > ~/.cron.env
 ```
 

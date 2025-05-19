@@ -48,6 +48,17 @@ impl fmt::Display for CronJob {
     }
 }
 
+// Same fields as `CronJob`, but not runnable. `IgnoredJob`s are still
+// part of the syntax tree, but they have their own type.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IgnoredJob {
+    pub tag: Option<String>,
+    pub schedule: String,
+    pub command: String,
+    pub description: Option<JobDescription>,
+    pub section: Option<JobSection>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Variable {
     pub identifier: String,
@@ -101,6 +112,7 @@ pub struct Unknown {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Token {
     CronJob(CronJob),
+    IgnoredJob(IgnoredJob),
     Variable(Variable),
     Comment(Comment),
     Unknown(Unknown),

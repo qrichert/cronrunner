@@ -2,7 +2,7 @@ use std::str::Chars;
 
 use super::hash;
 use super::tokens::{
-    Comment, CommentKind, CronJob, JobDescription, JobSection, Token, Unknown, Variable,
+    Comment, CommentKind, CronJob, IgnoredJob, JobDescription, JobSection, Token, Unknown, Variable,
 };
 
 /// Internal state for the [`Parser`].
@@ -101,11 +101,13 @@ impl Parser {
     }
 
     fn make_token_from_job_line(line: &str, state: &mut ParserState) -> Token {
-        if let Ok(job_token) = Self::make_job_token(line, state) {
-            state.job_uid += 1;
-            job_token
-        } else {
-            Self::make_unknown_token(line)
+        match Self::make_job_token(line, state) {
+            Ok(job_token @ Token::CronJob { .. }) => {
+                state.job_uid += 1;
+                job_token
+            }
+            Ok(ignored_job) => ignored_job,
+            _ => Self::make_unknown_token(line),
         }
     }
 
@@ -119,6 +121,17 @@ impl Parser {
         let previous_token = state.tokens.last();
         let mut description = Self::get_job_description_if_any(previous_token);
         let tag = Self::extract_tag_from_job_description(&mut description);
+        let section = state.job_section.clone();
+
+        if Self::is_job_ignored(tag.as_ref()) {
+            return Ok(Token::IgnoredJob(IgnoredJob {
+                tag,
+                schedule,
+                command,
+                description,
+                section,
+            }));
+        }
 
         let uid = state.job_uid;
         let fingerprint = hash::djb2(format!("uid({uid}),command({command})"));
@@ -130,7 +143,7 @@ impl Parser {
             schedule,
             command,
             description,
-            section: state.job_section.clone(),
+            section,
         }))
     }
 
@@ -257,6 +270,19 @@ impl Parser {
 
         let tag = tag[2..].to_string(); // '%{'
         Some(tag)
+    }
+
+    /// Determine whether a job should be ignored.
+    ///
+    /// If a job is ignored, it will have a special [`IgnoredJob`] type,
+    /// and will not appear in the job list, and will not be selectable.
+    ///
+    /// To be ignored, a job must have a tag named `ignore`.
+    ///
+    /// This is cronrunner specific, and has nothing to do with Cron
+    /// itself.
+    fn is_job_ignored(tag: Option<&String>) -> bool {
+        tag.is_some_and(|tag| tag == "ignore")
     }
 
     /// Extract section comment from a token (if any).
@@ -794,6 +820,74 @@ mod tests {
                 })
             ]
         );
+    }
+
+    #[test]
+    fn ignored_jobs_have_their_own_type() {
+        let tokens = Parser::parse(
+            "
+            ## %{ignore}
+            @daily printf 'hello, world'
+            ",
+        );
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Comment(Comment {
+                    value: String::from("%{ignore}"),
+                    kind: CommentKind::Description
+                }),
+                Token::IgnoredJob(IgnoredJob {
+                    tag: Some(String::from("ignore")),
+                    schedule: String::from("@daily"),
+                    command: String::from("printf 'hello, world'"),
+                    // It's only up until the first `}`.
+                    description: None,
+                    section: None,
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn ignored_jobs_have_no_influence() {
+        let tokens_without_ignored = Parser::parse(
+            "* * * * * printf 'foo'
+             * * * * * printf 'hello, world'
+             * * * * * printf 'bar'",
+        );
+
+        let tokens_with_ignored = Parser::parse(
+            "* * * * * printf 'foo'
+             ## %{ignore} Ignore the `baz` job.
+             * * * * * printf 'baz'
+             * * * * * printf 'hello, world'
+             * * * * * printf 'bar'",
+        );
+
+        // Note: Can't do that, as the synax trees are still different,
+        // but that's the spirit of the test.
+        // assert_eq!(tokens_without_ignored, tokens_with_ignored);
+
+        let Token::CronJob(job_without_ignored) = &tokens_without_ignored[1] else {
+            panic!()
+        };
+        // Index `3` because, while the job is ignored, we still added
+        // a `Comment` and an `IgnoredJob` to the AST.
+        let Token::CronJob(job_with_ignored) = &tokens_with_ignored[3] else {
+            panic!()
+        };
+
+        // Despite having been 'pushed down' the list by an ignored job,
+        // the UID and fingerprint hasn't changed.
+        assert_eq!(job_without_ignored.uid, 2);
+        assert_eq!(job_without_ignored.fingerprint, 4_461_213_176_276_726_319);
+        assert_eq!(job_without_ignored.command, "printf 'hello, world'");
+
+        assert_eq!(job_with_ignored.uid, 2);
+        assert_eq!(job_with_ignored.fingerprint, 4_461_213_176_276_726_319);
+        assert_eq!(job_with_ignored.command, "printf 'hello, world'");
     }
 
     #[test]
