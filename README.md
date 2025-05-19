@@ -21,6 +21,9 @@ _Run cron jobs manually._[^1]
 ## Track disk space.
 30 4 * * * echo $(date) $(df -h | grep "/dev/sda3") >> .disk-space.txt
 
+## %{ignore} Stealthy job.
+* * * * * env > ~/.cron.env
+
 FOO=:)
 0 12 * * * echo $FOO
 
