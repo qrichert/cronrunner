@@ -1,4 +1,4 @@
-default_install_hook_types: [pre-commit, pre-push]
+default_install_hook_types: [pre-push]
 repos:
   - repo: local
     hooks:
@@ -25,6 +25,6 @@ repos:
         entry: cargo doc --no-deps --all-features
         pass_filenames: false
   - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.5.1
+    rev: v3.8.1
     hooks:
       - id: prettier

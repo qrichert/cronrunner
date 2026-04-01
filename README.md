@@ -198,8 +198,8 @@ $ sudo install ./crn-* /usr/local/bin/crn
 ```console
 $ git clone https://github.com/qrichert/cronrunner.git
 $ cd cronrunner
-$ make build
-$ sudo make install
+$ just build
+$ sudo just install
 ```
 
 #### Through Cargo

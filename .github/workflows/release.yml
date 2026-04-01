@@ -15,12 +15,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0 # Full tag annotation.
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Just
+        uses: taiki-e/install-action@just
 
       - name: Cache cargo and target
         uses: actions/cache@v4
@@ -35,12 +38,12 @@ jobs:
             ${{ runner.os }}-
 
       - name: Build release binary
-        run: make build
+        run: just build
 
       - name: Prepare artifact
         run: |
           mkdir -p dist/
-          bin=$(make ci-bin-name)
+          bin=$(just ci-bin-name)
           platform=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
           cp "target/release/$bin" "dist/${bin}-${{ github.ref_name }}-${platform}"
         shell: bash
@@ -61,9 +64,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      # `actions/checkout@v4` somehow transforms annotated tags into
+      # `actions/checkout@v6` somehow transforms annotated tags into
       # lightweight tags, which prevents us from reading release notes.
       # This fetches annotated tags and overrides existing mangled tags.
       - name: Fetch annotated tags
