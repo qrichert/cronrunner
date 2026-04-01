@@ -733,7 +733,7 @@ mod tests {
         assert!(
             config
                 .env_file
-                .is_some_and(|contents| contents == PathBuf::from("~/.cron.env"))
+                .is_some_and(|contents| *contents == *"~/.cron.env")
         );
     }
 
@@ -751,7 +751,7 @@ mod tests {
         assert!(
             config
                 .env_file
-                .is_some_and(|contents| contents == PathBuf::from("~/.cron.env"))
+                .is_some_and(|contents| *contents == *"~/.cron.env")
         );
     }
 
@@ -799,7 +799,7 @@ mod tests {
         assert!(
             config
                 .env_file
-                .is_some_and(|contents| contents == PathBuf::from("~/.cron.env"))
+                .is_some_and(|contents| *contents == *"~/.cron.env")
         );
     }
 

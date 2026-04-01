@@ -380,10 +380,10 @@ impl Crontab {
         for token in &self.tokens {
             if let Token::Variable(variable) = token {
                 variables.insert(variable.identifier.clone(), variable.value.clone());
-            } else if let Token::CronJob(job) = token {
-                if job == target_job {
-                    break; // Variables coming after the job are not used.
-                }
+            } else if let Token::CronJob(job) = token
+                && job == target_job
+            {
+                break; // Variables coming after the job are not used.
             }
         }
         variables

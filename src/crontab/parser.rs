@@ -230,10 +230,9 @@ impl Parser {
             value: description,
             kind: CommentKind::Description,
         })) = previous_token
+            && !description.is_empty()
         {
-            if !description.is_empty() {
-                return Some(JobDescription(description.clone()));
-            }
+            return Some(JobDescription(description.clone()));
         }
         None
     }
@@ -299,17 +298,16 @@ impl Parser {
             value: section,
             kind: CommentKind::Section,
         }) = comment_token
+            && !section.is_empty()
         {
-            if !section.is_empty() {
-                let uid = state
-                    .job_section
-                    .as_ref()
-                    .map_or(1, |section| section.uid + 1);
-                return Some(JobSection {
-                    uid,
-                    title: section.clone(),
-                });
-            }
+            let uid = state
+                .job_section
+                .as_ref()
+                .map_or(1, |section| section.uid + 1);
+            return Some(JobSection {
+                uid,
+                title: section.clone(),
+            });
         }
         None
     }

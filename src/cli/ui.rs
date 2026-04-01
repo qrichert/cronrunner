@@ -40,22 +40,22 @@ pub struct Color;
 
 impl Color {
     #[must_use]
-    pub fn error(string: &str) -> Cow<str> {
+    pub fn error(string: &str) -> Cow<'_, str> {
         Self::color(ERROR, string)
     }
 
     #[must_use]
-    pub fn highlight(string: &str) -> Cow<str> {
+    pub fn highlight(string: &str) -> Cow<'_, str> {
         Self::color(HIGHLIGHT, string)
     }
 
     #[must_use]
-    pub fn attenuate(string: &str) -> Cow<str> {
+    pub fn attenuate(string: &str) -> Cow<'_, str> {
         Self::color(ATTENUATE, string)
     }
 
     #[must_use]
-    pub fn title(string: &str) -> Cow<str> {
+    pub fn title(string: &str) -> Cow<'_, str> {
         Self::color(TITLE, string)
     }
 
