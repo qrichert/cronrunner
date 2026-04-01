@@ -15,6 +15,9 @@ name = "crn"
 path = "src/main.rs"
 
 [profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
 strip = true
 
 [lints.rust]
