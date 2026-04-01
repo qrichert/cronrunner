@@ -90,3 +90,13 @@ pub fn read_output_file(file: &str) -> String {
     fs::read_to_string(bin_dir.join(file).with_extension("txt"))
         .expect("if file doesn't exist, the test failed")
 }
+
+/// Clean up any stale output file to keep runs isolated.
+pub fn remove_output_file(file: &str) {
+    let bin_dir = Path::new(MOCK_BIN_DIR);
+
+    let output = bin_dir.join(file).with_extension("txt");
+    if output.exists() {
+        fs::remove_file(output).unwrap();
+    }
+}

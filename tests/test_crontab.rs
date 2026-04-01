@@ -7,11 +7,16 @@ use cronrunner::crontab::{RunResultDetail, make_instance};
 use cronrunner::reader::{ReadError, ReadErrorDetail, Reader};
 use cronrunner::tokens::{Comment, CommentKind, CronJob, Token, Variable};
 
-use crate::utils::{mock_crontab, mock_shell, read_output_file};
+use crate::utils::{mock_crontab, mock_shell, read_output_file, remove_output_file};
 
 // Warning: These tests MUST be run sequentially. Running them in
 // parallel threads may cause conflicts with environment variables,
 // as a variable may be overridden before it is used.
+//
+// `make test` already runs the suite with `--test-threads 1`. If we
+// need parallel-safe tests later, the migration path is to allocate a
+// per-test temp bin dir and thread it into process-local env setup
+// instead of mutating the global env.
 
 // Really, this is a unit test. But here we've got the mocking machinery
 // available at no extra cost.
@@ -148,6 +153,7 @@ fn run_job_detached_error_other_reason() {
 #[test]
 fn run_job_with_custom_env() {
     mock_crontab("crontab_runnable_jobs");
+    remove_output_file("output_env");
     mock_shell("shell_output_env_to_file");
 
     // `PATH` is overridden too, so we need to manually persist it.
@@ -178,6 +184,7 @@ fn run_job_with_custom_env() {
 #[test]
 fn run_job_with_custom_env_crontab_variables_have_precedence() {
     mock_crontab("crontab_runnable_jobs");
+    remove_output_file("output_env");
     mock_shell("shell_output_env_to_file");
 
     // `PATH` is overridden too, so we need to manually persist it.
@@ -208,6 +215,7 @@ fn run_job_with_custom_env_crontab_variables_have_precedence() {
 #[test]
 fn run_job_with_custom_env_parent_env_does_not_leak_into_set_env() {
     mock_crontab("crontab_runnable_jobs");
+    remove_output_file("output_env");
     mock_shell("shell_output_env_to_file");
 
     // `PATH` is overridden too, so we need to manually persist it.
@@ -237,6 +245,7 @@ fn run_job_with_custom_env_parent_env_does_not_leak_into_set_env() {
 #[test]
 fn correct_job_is_run() {
     mock_crontab("crontab_runnable_jobs");
+    remove_output_file("output_args");
     mock_shell("shell_output_args_to_file");
 
     let crontab = make_instance().unwrap();
@@ -254,6 +263,7 @@ fn correct_job_is_run() {
 #[test]
 fn edge_cases_with_variables() {
     mock_crontab("crontab_variables_edge_cases");
+    remove_output_file("output_stdout_stderr");
     mock_shell("shell_output_stdout_stderr_to_file");
 
     let crontab = make_instance().unwrap();

@@ -511,6 +511,11 @@ mod tests {
     // Warning: These tests MUST be run sequentially. Running them in
     // parallel threads may cause conflicts with environment variables,
     // as a variable may be overridden before it is used.
+    //
+    // `make test` already runs the suite with `--test-threads 1`. If
+    // we need parallel-safe tests later, the migration path is to
+    // allocate a per-test temp bin dir and thread it into process-local
+    // env setup instead of mutating the global env.
 
     fn tokens() -> Vec<Token> {
         vec![
