@@ -51,7 +51,7 @@ impl Config {
                 break;
             }
 
-            if arg == "-v" || arg == "--version" {
+            if arg == "-V" || arg == "--version" {
                 config.version = true;
                 break;
             }
@@ -151,7 +151,7 @@ Usage: {bin} [OPTIONS] [ID]
 
 Options:
   -h, --help           Show this message and exit.
-  -v, --version        Show the version and exit.
+  -V, --version        Show the version and exit.
   -l, --list-only      List available jobs and exit.
       --as-json        Render `--list-only` as JSON.
   -s, --safe           Use job fingerprints.
@@ -401,7 +401,7 @@ mod tests {
         dbg!(&message);
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains("-h, --help"));
-        assert!(message.contains("-v, --version"));
+        assert!(message.contains("-V, --version"));
         assert!(message.contains("-l, --list-only"));
         assert!(message.contains("--as-json"));
         assert!(message.contains("-s, --safe"));
@@ -450,7 +450,7 @@ mod tests {
         dbg!(&message);
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains("-h, --help"));
-        assert!(message.contains("-v, --version"));
+        assert!(message.contains("-V, --version"));
     }
 
     #[test]
@@ -468,11 +468,20 @@ mod tests {
 
     #[test]
     fn argument_version_shorthand() {
-        let args = [String::from("/usr/local/bin/crn"), String::from("-v")].into_iter();
+        let args = [String::from("/usr/local/bin/crn"), String::from("-V")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
         assert!(config.version);
+    }
+
+    #[test]
+    fn argument_version_lowercase_shorthand_is_rejected() {
+        let args = [String::from("/usr/local/bin/crn"), String::from("-v")].into_iter();
+
+        let err = Config::build_from_args(args).unwrap_err();
+
+        assert_eq!(err, "Unexpected argument '-v'");
     }
 
     #[test]

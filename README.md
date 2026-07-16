@@ -41,7 +41,7 @@ Usage: crn [OPTIONS] [ID]
 
 Options:
   -h, --help           Show this message and exit.
-  -v, --version        Show the version and exit.
+  -V, --version        Show the version and exit.
   -l, --list-only      List available jobs and exit.
       --as-json        Render `--list-only` as JSON.
   -s, --safe           Use job fingerprints.
