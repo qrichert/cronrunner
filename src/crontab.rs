@@ -1379,7 +1379,7 @@ mod tests {
 
         let json = crontab.to_json();
 
-        println!("{}", &json);
+        println!("{json}");
         assert_eq!(
             json,
             r#"[{"uid":1,"fingerprint":"cc1dae","tag":"taggy \"tag\"","schedule":"@daily","command":"/usr/bin/bash ~/startup.sh","description":null,"section":null},{"uid":2,"fingerprint":"ed918e1eee304bae","tag":null,"schedule":"* * * * *","command":"echo \"$FOO\"","description":"Print \"variable\".","section":{"uid":1,"title":"Some \"testing\" going on here..."}}]"#

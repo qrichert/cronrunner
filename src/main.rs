@@ -107,7 +107,7 @@ fn main() -> ExitStatus {
         return exit_from_invalid_job_selection();
     };
 
-    println!("{} {}", ui::Color::highlight("$"), &job.command);
+    println!("{} {}", ui::Color::highlight("$"), job.command);
 
     let res = if config.detach {
         crontab.run_detached(job)
@@ -134,7 +134,7 @@ fn try_parse_env_file_if_given(
     }
     let Ok(env) = std::fs::read_to_string(env_file) else {
         #[cfg(not(tarpaulin_include))] // Hard to make reading fail.
-        return Err(format!("'{}' could not be read.", &env_file.display()));
+        return Err(format!("'{}' could not be read.", env_file.display()));
     };
 
     let env: HashMap<String, String> = env
