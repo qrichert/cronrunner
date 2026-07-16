@@ -56,7 +56,7 @@ coverage-pct:
 # Install `cronrunner`
 install:
     install -d "{{ PREFIX }}/bin/"
-    install ./target/release/deez "{{ PREFIX }}/bin/deez"
+    install ./target/release/crn "{{ PREFIX }}/bin/crn"
 
 # Output binary name for use in CI
 @ci-bin-name:
