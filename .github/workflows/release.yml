@@ -6,8 +6,13 @@ on:
       - '*.*.*'
 
 jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: Build
+    needs: ci
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
