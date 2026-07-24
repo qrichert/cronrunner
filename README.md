@@ -9,7 +9,7 @@
 _Run cron jobs manually._[^1]
 
 <p align="center">
-  <img src="./cronrunner.png" alt="cronrunner">
+  <img src="https://raw.githubusercontent.com/qrichert/cronrunner/main/cronrunner.png" alt="cronrunner">
 </p>
 
 ```crontab
