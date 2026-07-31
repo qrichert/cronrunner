@@ -24,7 +24,8 @@ repos:
         types: [rust]
         entry: cargo doc --no-deps --all-features
         pass_filenames: false
-  - repo: https://github.com/rbubley/mirrors-prettier
-    rev: v3.8.1
-    hooks:
-      - id: prettier
+      - id: oxfmt
+        name: oxfmt
+        language: system
+        entry: bunx --bun oxfmt@latest --ignore-path .oxfmtignore
+        pass_filenames: false

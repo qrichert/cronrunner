@@ -1,0 +1,8 @@
+{
+  "ignorePatterns": [
+    // TODO: Format `TOML` once `Oxfmt` can preserve intentionally
+    // multiline arrays instead of collapsing them.
+    "**/*.toml"
+  ],
+  "proseWrap": "always"
+}

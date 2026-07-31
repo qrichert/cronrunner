@@ -204,11 +204,12 @@ Install the `crn` command from [crates.io] with Cargo:
 cargo install cronrunner
 ```
 
-Pre-built binaries for Linux and macOS are available on the
-[latest GitHub release].
+Pre-built binaries for Linux and macOS are available on the [latest
+GitHub release].
 
 [Documentation] is available on docs.rs.
 
 [crates.io]: https://crates.io/crates/cronrunner
-[latest GitHub release]: https://github.com/qrichert/cronrunner/releases/latest
+[latest GitHub release]:
+  https://github.com/qrichert/cronrunner/releases/latest
 [Documentation]: https://docs.rs/cronrunner
