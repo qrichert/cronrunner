@@ -1,4 +1,4 @@
-//! Run cron jobs manually.
+//! List and manually run jobs from a crontab.
 //!
 //! # Points of Interest
 //!

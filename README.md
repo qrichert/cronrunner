@@ -181,33 +181,6 @@ them to run on February 31<sup>st</sup>:
 0 0 31 2 * echo "I never run on my own!"
 ```
 
-## Installation
-
-### Directly
-
-```console
-$ wget https://github.com/qrichert/cronrunner/releases/download/X.X.X/crn-X.X.X-xxx
-$ sudo install ./crn-* /usr/local/bin/crn
-```
-
-### Manual Build
-
-#### System-wide
-
-```console
-$ git clone https://github.com/qrichert/cronrunner.git
-$ cd cronrunner
-$ just build
-$ sudo just install
-```
-
-#### Through Cargo
-
-```shell
-cargo install cronrunner
-cargo install --git https://github.com/qrichert/cronrunner.git
-```
-
 ## License
 
 This project is dual-licensed:
@@ -222,3 +195,20 @@ a modified version of it, you must comply with GPLv3+.
 [^1]:
     cronrunner used to be a Python project, see
     [1.1.4](https://github.com/qrichert/cronrunner/tree/1.1.4).
+
+## Installation
+
+Install the `crn` command from [crates.io] with Cargo:
+
+```shell
+cargo install cronrunner
+```
+
+Pre-built binaries for Linux and macOS are available on the
+[latest GitHub release].
+
+[Documentation] is available on docs.rs.
+
+[crates.io]: https://crates.io/crates/cronrunner
+[latest GitHub release]: https://github.com/qrichert/cronrunner/releases/latest
+[Documentation]: https://docs.rs/cronrunner

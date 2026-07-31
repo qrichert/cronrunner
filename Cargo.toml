@@ -7,7 +7,7 @@ description = "Run cron jobs manually."
 license = "GPL-3.0-or-later OR MIT"
 repository = "https://github.com/qrichert/cronrunner.git"
 readme = "README.md"
-keywords = ["cron", "crontab", "cli"]
+keywords = ["cron", "crontab", "cron-jobs", "job-runner", "automation"]
 categories = ["command-line-utilities"]
 
 [[bin]]
