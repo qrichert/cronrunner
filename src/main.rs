@@ -329,9 +329,7 @@ fn get_user_selection(use_fingerprint: bool) -> Result<Option<Job>, ()> {
     _ = io::stdout().flush();
 
     let mut job_selected = String::new();
-    io::stdin()
-        .read_line(&mut job_selected)
-        .expect("cannot read user input");
+    io::stdin().read_line(&mut job_selected).map_err(|_| ())?;
 
     parse_user_job_selection(&job_selected, use_fingerprint)
 }
