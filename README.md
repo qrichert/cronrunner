@@ -1,7 +1,6 @@
 # cronrunner
 
-[![license (bin): GPL v3+](https://img.shields.io/badge/license-GPLv3+-blue)](https://www.gnu.org/licenses/gpl-3.0)
-[![license (lib): MIT](https://img.shields.io/badge/license-MIT-blue)](https://opensource.org/license/mit)
+![Crates.io License](https://img.shields.io/crates/l/cronrunner)
 ![GitHub Tag](https://img.shields.io/github/v/tag/qrichert/cronrunner?sort=semver&filter=*.*.*&label=release)
 [![crates.io](https://img.shields.io/crates/d/cronrunner?logo=rust&logoColor=white&color=orange)](https://crates.io/crates/cronrunner)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/qrichert/cronrunner/ci.yml?label=tests)](https://github.com/qrichert/cronrunner/actions)
@@ -180,17 +179,6 @@ them to run on February 31<sup>st</sup>:
 ```crontab
 0 0 31 2 * echo "I never run on my own!"
 ```
-
-## License
-
-This project is dual-licensed:
-
-- The **binary** as a product is licensed under GPLv3+.
-- The **library** is available under the MIT license.
-
-If you are using only the library in your own projects, you may use it
-under the MIT license. However, if you are redistributing the binary or
-a modified version of it, you must comply with GPLv3+.
 
 [^1]:
     cronrunner used to be a Python project, see
