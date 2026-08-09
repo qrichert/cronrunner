@@ -434,22 +434,22 @@ impl Crontab {
                 r#""tag":{},"#,
                 job.tag.as_ref().map_or_else(
                     || Cow::Borrowed("null"),
-                    |tag| { Cow::Owned(format!(r#""{}""#, tag.replace('"', r#"\""#))) }
+                    |tag| { Cow::Owned(format!(r#""{}""#, escape_json_string(tag))) }
                 )
             );
-            _ = write!(json, r#""schedule":"{}","#, job.schedule);
             _ = write!(
                 json,
-                r#""command":"{}","#,
-                job.command.replace('"', r#"\""#)
+                r#""schedule":"{}","#,
+                escape_json_string(&job.schedule)
             );
+            _ = write!(json, r#""command":"{}","#, escape_json_string(&job.command));
             _ = write!(
                 json,
                 r#""description":{},"#,
                 job.description.as_ref().map_or_else(
                     || Cow::Borrowed("null"),
                     |description| {
-                        Cow::Owned(format!(r#""{}""#, description.0.replace('"', r#"\""#)))
+                        Cow::Owned(format!(r#""{}""#, escape_json_string(&description.0)))
                     }
                 )
             );
@@ -461,7 +461,7 @@ impl Crontab {
                     |section| Cow::Owned(format!(
                         r#"{{"uid":{},"title":"{}"}}"#,
                         section.uid,
-                        section.title.replace('"', r#"\""#)
+                        escape_json_string(&section.title)
                     ))
                 )
             );
@@ -475,6 +475,29 @@ impl Crontab {
 
         json
     }
+}
+
+/// Escape string for JSON value.
+///
+/// Handles every character RFC 8259 §7 requires escaping: `"`, `\`, and
+/// the C0 control characters (with short escapes for newline, carriage
+/// return, and tab, and `\uXXXX` for the rest).
+fn escape_json_string(string: &str) -> String {
+    let mut escaped = String::with_capacity(string.len());
+    for c in string.chars() {
+        match c {
+            '"' => escaped.push_str(r#"\""#),
+            '\\' => escaped.push_str(r"\\"),
+            '\n' => escaped.push_str(r"\n"),
+            '\r' => escaped.push_str(r"\r"),
+            '\t' => escaped.push_str(r"\t"),
+            c if c.is_control() => {
+                _ = write!(escaped, r"\u{:04x}", u32::from(c));
+            }
+            c => escaped.push(c),
+        }
+    }
+    escaped
 }
 
 /// Create an instance of [`Crontab`].
@@ -1383,6 +1406,38 @@ mod tests {
         assert_eq!(
             json,
             r#"[{"uid":1,"fingerprint":"cc1dae","tag":"taggy \"tag\"","schedule":"@daily","command":"/usr/bin/bash ~/startup.sh","description":null,"section":null},{"uid":2,"fingerprint":"ed918e1eee304bae","tag":null,"schedule":"* * * * *","command":"echo \"$FOO\"","description":"Print \"variable\".","section":{"uid":1,"title":"Some \"testing\" going on here..."}}]"#
+        );
+    }
+
+    #[test]
+    fn to_json_escapes_special_characters() {
+        // One RFC 8259 mandatory escape per string field: `command`
+        // carries a quote plus a literal backslash-n, the others carry
+        // raw control characters (newline, tab, CR, U+0001). Note the
+        // inputs below use normal Rust literals, so `\n`/`\t`/`\r`/
+        // `\u{0001}` are the _actual_ control bytes, not text.
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            fingerprint: 0xdead,
+            tag: Some(String::from("a\nb")),
+            schedule: String::from("*/5\t* * * *"),
+            command: String::from("echo \"a\\nb\""),
+            description: Some(JobDescription(String::from("c\rd"))),
+            section: Some(tokens::JobSection {
+                uid: 7,
+                title: String::from("e\u{0001}f"),
+            }),
+        })]);
+
+        let json = crontab.to_json();
+
+        // The expected output is a raw literal, so every `\n`, `\t`,
+        // `\r`, `\u0001`, `\\` and `\"` below is the literal escape
+        // sequence the serializer must emit (i.e. valid JSON).
+        println!("{json}");
+        assert_eq!(
+            json,
+            r#"[{"uid":1,"fingerprint":"dead","tag":"a\nb","schedule":"*/5\t* * * *","command":"echo \"a\\nb\"","description":"c\rd","section":{"uid":7,"title":"e\u0001f"}}]"#
         );
     }
 }
