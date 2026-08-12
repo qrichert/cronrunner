@@ -83,6 +83,7 @@ impl Parser {
     }
 
     fn make_token_from_line(line: &str, state: &mut ParserState) -> Token {
+        debug_assert!(!line.is_empty());
         if Self::is_job(line) {
             Self::make_token_from_job_line(line, state)
         } else if Self::is_variable(line) {
