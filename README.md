@@ -41,7 +41,7 @@ Usage: crn [OPTIONS] [ID]
 Options:
   -l, --list-only      List available jobs and exit.
       --as-json        Render `--list-only` as JSON.
-  -s, --safe           Use job fingerprints.
+      --fingerprint    Use job fingerprints.
   -t, --tag <TAG>      Run specific tag.
   -d, --detach         Run job in the background.
   -e, --env <FILE>     Override job environment.
@@ -105,15 +105,15 @@ Housekeeping
 
 Descriptions and sections are independent from one another.
 
-### Safe mode
+### Fingerprints and tags
 
 Job IDs are attributed in the order of appearance in the crontab. This
 can be dangerous if used in scripts, because if the crontab changes, the
 wrong job may get run.
 
-Instead, you can activate `--safe` mode, in which jobs are identified by
-a fingerprint. This is less user-friendly, but if the jobs get
-reordered, or if the command changes, that fingerprint will be
+Instead, you can activate `--fingerprint` mode, in which jobs are
+identified by a fingerprint. This is less user-friendly, but if the jobs
+get reordered, or if the command changes, that fingerprint will be
 invalidated and the run will fail.
 
 Or, you could tag a specific job and run it with `--tag`. Tags are
@@ -174,7 +174,7 @@ $ crn -f personal.cron -f project.cron
 ```
 
 If you pass multiple file sources, they are read and run in isolation.
-Variables from one crontab don't leak into the other, and safe mode
+Variables from one crontab don't leak into the other, and job
 fingerprints remain stable even if you reorder the sources.
 
 ### Configuration
@@ -183,8 +183,8 @@ Some arguments have corresponding environment variables, allowing you to
 set values permanently in a shell startup file (e.g., `~/.bashrc`).
 
 ```
---safe        CRONRUNNER_SAFE=1
---env <FILE>  CRONRUNNER_ENV=<FILE>
+--fingerprint  CRONRUNNER_FINGERPRINT=1
+--env <FILE>   CRONRUNNER_ENV=<FILE>
 ```
 
 ### Tips

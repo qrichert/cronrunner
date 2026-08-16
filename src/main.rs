@@ -64,19 +64,19 @@ fn main() -> ExitStatus {
         if config.as_json {
             println!("{}", sources.to_json());
         } else {
-            print_job_selection_menu(sources.documents(), config.safe);
+            print_job_selection_menu(sources.documents(), config.fingerprint);
         }
         return ExitStatus::Success;
     }
 
     let job_selected = if let Some(job) = config.job {
         job
-    } else if let Some(job) = read_job_selection_from_stdin(config.safe) {
+    } else if let Some(job) = read_job_selection_from_stdin(config.fingerprint) {
         job
     } else {
-        print_job_selection_menu(sources.documents(), config.safe);
+        print_job_selection_menu(sources.documents(), config.fingerprint);
 
-        match get_user_selection(config.safe) {
+        match get_user_selection(config.fingerprint) {
             Err(()) => return exit_from_invalid_job_selection(),
             Ok(None) => return ExitStatus::Success,
             Ok(Some(job)) => job,
@@ -162,7 +162,7 @@ Hint:
 
       {min}*{reset} {h}*{reset} {d}*{reset} {mon}*{reset} {dow}*{reset} {command}env > {env_file}{reset}
 ",
-env_file=env_file.display(),
+        env_file=env_file.display(),
         error = ui::Color::error("error"),
         min = ui::Color::maybe_color("\x1b[95m"),
         h = ui::Color::maybe_color("\x1b[38;5;81m"),

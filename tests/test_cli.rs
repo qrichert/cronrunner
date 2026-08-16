@@ -11,6 +11,7 @@ fn crn() -> Command {
     command
         .env("NO_COLOR", "1")
         .env_remove("CRONRUNNER_ENV")
+        .env_remove("CRONRUNNER_FINGERPRINT")
         .env_remove("CRONRUNNER_SAFE")
         .env_remove("FIRST_ONLY")
         .stdin(Stdio::null());
@@ -44,6 +45,59 @@ fn fingerprint_for(output: &Output, command: &str) -> String {
         .next()
         .unwrap()
         .to_string()
+}
+
+#[test]
+fn fingerprint_selection_compatibility_aliases_match_canonical_menu() {
+    let file = fixture("crontab_file_one.cron");
+    let file = file.to_str().unwrap();
+
+    let canonical = crn()
+        .args(["--fingerprint", "--file", file, "--list-only"])
+        .output()
+        .unwrap();
+    let safe = crn()
+        .args(["--safe", "--file", file, "--list-only"])
+        .output()
+        .unwrap();
+    let safe_shorthand = crn()
+        .args(["-s", "--file", file, "--list-only"])
+        .output()
+        .unwrap();
+    let canonical_environment = crn()
+        .env("CRONRUNNER_FINGERPRINT", "1")
+        .args(["--file", file, "--list-only"])
+        .output()
+        .unwrap();
+    let safe_environment = crn()
+        .env("CRONRUNNER_SAFE", "1")
+        .args(["--file", file, "--list-only"])
+        .output()
+        .unwrap();
+
+    let canonical_stdout = stdout(&canonical);
+    for output in [
+        &canonical,
+        &safe,
+        &safe_shorthand,
+        &canonical_environment,
+        &safe_environment,
+    ] {
+        assert!(output.status.success(), "{}", stderr(output));
+        assert_eq!(stdout(output), canonical_stdout);
+    }
+
+    assert!(stderr(&canonical).is_empty());
+    assert_eq!(
+        stderr(&safe),
+        "warning: '--safe' is deprecated; use '--fingerprint' instead.\n"
+    );
+    assert_eq!(
+        stderr(&safe_shorthand),
+        "warning: '-s' is deprecated; use '--fingerprint' instead.\n"
+    );
+    assert!(stderr(&canonical_environment).is_empty());
+    assert!(stderr(&safe_environment).is_empty());
 }
 
 #[test]
@@ -102,11 +156,16 @@ fn adding_another_file_does_not_change_a_job_fingerprint() {
     let second = fixture("crontab_file_two.cron");
 
     let alone = crn()
-        .args(["--safe", "--file", first.to_str().unwrap(), "--list-only"])
+        .args([
+            "--fingerprint",
+            "--file",
+            first.to_str().unwrap(),
+            "--list-only",
+        ])
         .output()
         .unwrap();
     let after_another_file = crn()
-        .args(["--safe", "--file", second.to_str().unwrap()])
+        .args(["--fingerprint", "--file", second.to_str().unwrap()])
         .args(["--file", first.to_str().unwrap(), "--list-only"])
         .output()
         .unwrap();
@@ -137,12 +196,12 @@ fn canonical_path_spelling_does_not_change_a_job_fingerprint() {
 
     let relative_output = crn()
         .current_dir(&directory)
-        .args(["--safe", "--file", "jobs.cron", "--list-only"])
+        .args(["--fingerprint", "--file", "jobs.cron", "--list-only"])
         .output()
         .unwrap();
     let absolute_output = crn()
         .args([
-            "--safe",
+            "--fingerprint",
             "--file",
             absolute.to_str().unwrap(),
             "--list-only",
@@ -150,7 +209,12 @@ fn canonical_path_spelling_does_not_change_a_job_fingerprint() {
         .output()
         .unwrap();
     let symlink_output = crn()
-        .args(["--safe", "--file", link.to_str().unwrap(), "--list-only"])
+        .args([
+            "--fingerprint",
+            "--file",
+            link.to_str().unwrap(),
+            "--list-only",
+        ])
         .output()
         .unwrap();
 

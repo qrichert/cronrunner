@@ -11,7 +11,7 @@ pub struct Config {
     pub version: bool,
     pub list_only: bool,
     pub as_json: bool,
-    pub safe: bool,
+    pub fingerprint: bool,
     pub tag: bool,
     pub detach: bool,
     pub env_file: Option<PathBuf>,
@@ -52,8 +52,20 @@ impl Config {
                 continue;
             }
 
+            if arg == "--fingerprint" {
+                config.fingerprint = true;
+                continue;
+            }
+
+            // TODO: Remove the deprecated `--safe` and `-s` aliases in a future major release.
             if arg == "-s" || arg == "--safe" {
-                config.safe = true;
+                eprintln!(
+                    "{warning}warning{reset}: '{arg}' is deprecated; use '--fingerprint' instead.",
+                    warning = ui::Color::maybe_color("\x1b[0;93m"),
+                    reset = ui::Color::maybe_color(ui::RESET),
+                );
+
+                config.fingerprint = true;
                 continue;
             }
 
@@ -89,7 +101,7 @@ impl Config {
             if config.tag {
                 config.job = Some(Job::Tag(arg));
                 break;
-            } else if config.safe {
+            } else if config.fingerprint {
                 // Check for fingerprint.
                 if let Ok(job) = u64::from_str_radix(&arg, 16) {
                     #[cfg(not(tarpaulin_include))] // Wrongly marked uncovered.
@@ -126,8 +138,11 @@ impl Config {
     /// once in the `~/.bashrc` than to add `--env <file>` to every
     /// command.
     fn pre_populate_from_env(config: &mut Self) {
-        if std::env::var_os("CRONRUNNER_SAFE").is_some() {
-            config.safe = true;
+        // TODO: Remove the deprecated `CRONRUNNER_SAFE` alias in a future major release.
+        if std::env::var_os("CRONRUNNER_FINGERPRINT").is_some()
+            || std::env::var_os("CRONRUNNER_SAFE").is_some()
+        {
+            config.fingerprint = true;
         }
         if let Some(env_file) = std::env::var_os("CRONRUNNER_ENV").filter(|f| !f.is_empty()) {
             config.env_file = Some(PathBuf::from(env_file));
@@ -145,7 +160,7 @@ Usage: {bin} [OPTIONS] [ID]
 Options:
   -l, --list-only      List available jobs and exit.
       --as-json        Render `--list-only` as JSON.
-  -s, --safe           Use job fingerprints.
+      --fingerprint    Use job fingerprints.
   -t, --tag <TAG>      Run specific tag.
   -d, --detach         Run job in the background.
   -e, --env <FILE>     Override job environment.
@@ -210,15 +225,15 @@ Extras:
 
   Descriptions and sections are independent from one another.
 
-Safe mode:
+Fingerprints and tags:
   Job IDs are attributed in the order of appearance in the crontab. This
   can be dangerous if used in scripts, because if the crontab changes,
   the wrong job may get run.
 
-  Instead, you can activate `--safe` mode, in which jobs are identified
-  by a fingerprint. This is less user-friendly, but if the jobs get
-  reordered, or if the command changes, that fingerprint will be
-  invalidated and the run will fail.
+  Instead, you can activate `--fingerprint` mode, in which jobs are
+  identified by a fingerprint. This is less user-friendly, but if the
+  jobs get reordered, or if the command changes, that fingerprint will
+  be invalidated and the run will fail.
 
   Or, you could tag a specific job and run it with `--tag`. Tags are
   stable even if the underlying job changes. This is great for scripts,
@@ -263,15 +278,15 @@ Crontab source:
       {highlight}${reset} {bin} -f personal.cron -f project.cron
 
   If you pass multiple file sources, they are read and run in isolation.
-  Variables from one crontab don't leak into the other, and safe mode
+  Variables from one crontab don't leak into the other, and job
   fingerprints remain stable even if you reorder the sources.
 
 Configuration:
   Some arguments have corresponding environment variables, allowing you
   to set values permanently in a shell startup file (e.g., `~/.bashrc`).
 
-      --safe        CRONRUNNER_SAFE=1
-      --env <FILE>  CRONRUNNER_ENV=<FILE>
+      --fingerprint  CRONRUNNER_FINGERPRINT=1
+      --env <FILE>   CRONRUNNER_ENV=<FILE>
 
 Tips:
   If you have jobs you only want to execute manually, you can schedule
@@ -326,7 +341,7 @@ mod tests {
                 version: false,
                 list_only: false,
                 as_json: false,
-                safe: false,
+                fingerprint: false,
                 tag: false,
                 detach: false,
                 env_file: None,
@@ -411,7 +426,7 @@ mod tests {
         assert!(message.contains("-V, --version"));
         assert!(message.contains("-l, --list-only"));
         assert!(message.contains("--as-json"));
-        assert!(message.contains("-s, --safe"));
+        assert!(message.contains("--fingerprint"));
         assert!(message.contains("-t, --tag"));
         assert!(message.contains("-d, --detach"));
         assert!(message.contains("-e, --env <FILE>"));
@@ -542,14 +557,14 @@ mod tests {
         let args = [
             String::from("/usr/local/bin/crn"),
             String::from("--list-only"),
-            String::from("--safe"),
+            String::from("--fingerprint"),
         ]
         .into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
         assert!(config.list_only);
-        assert!(config.safe);
+        assert!(config.fingerprint);
     }
 
     #[test]
@@ -570,14 +585,14 @@ mod tests {
         let args = [
             String::from("/usr/local/bin/crn"),
             String::from("--as-json"),
-            String::from("--safe"),
+            String::from("--fingerprint"),
         ]
         .into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
         assert!(config.as_json);
-        assert!(config.safe);
+        assert!(config.fingerprint);
     }
 
     #[test]
@@ -596,40 +611,72 @@ mod tests {
     }
 
     #[test]
-    fn argument_safe() {
+    fn argument_fingerprint() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--fingerprint"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.fingerprint);
+    }
+
+    #[test]
+    fn argument_safe_compatibility_alias() {
         let args = [String::from("/usr/local/bin/crn"), String::from("--safe")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(config.safe);
+        assert!(config.fingerprint);
     }
 
     #[test]
-    fn argument_safe_shorthand() {
+    fn argument_safe_shorthand_compatibility_alias() {
         let args = [String::from("/usr/local/bin/crn"), String::from("-s")].into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(config.safe);
+        assert!(config.fingerprint);
     }
 
     #[test]
-    fn argument_safe_continues_after_match() {
+    fn argument_fingerprint_continues_after_match() {
         let args = [
             String::from("/usr/local/bin/crn"),
-            String::from("--safe"),
+            String::from("--fingerprint"),
             String::from("1337f"),
         ]
         .into_iter();
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(config.safe);
+        assert!(config.fingerprint);
         assert!(matches!(config.job, Some(Job::Fingerprint(78_719))));
     }
 
     #[test]
-    fn argument_safe_from_env() {
+    fn argument_fingerprint_from_env() {
+        unsafe {
+            env::set_var("CRONRUNNER_FINGERPRINT", "");
+        }
+
+        let args = iter::once(String::from("/usr/local/bin/crn"));
+
+        let config = Config::build_from_args(args).unwrap();
+
+        // If we don't remove it, it will make tests expecting it to be
+        // `false` fail (remove _before_ `assert` returns early).
+        unsafe {
+            env::remove_var("CRONRUNNER_FINGERPRINT");
+        }
+
+        assert!(config.fingerprint);
+    }
+
+    #[test]
+    fn argument_safe_compatibility_alias_from_env() {
         unsafe {
             env::set_var("CRONRUNNER_SAFE", "");
         }
@@ -644,7 +691,7 @@ mod tests {
             env::remove_var("CRONRUNNER_SAFE");
         }
 
-        assert!(config.safe);
+        assert!(config.fingerprint);
     }
 
     #[test]
