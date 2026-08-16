@@ -5,12 +5,13 @@ use std::env;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
-use cronrunner::crontab::{self, RunResult, RunResultDetail};
+use cronrunner::crontab::{self, Crontab, RunResult, RunResultDetail};
 use cronrunner::reader::{ReadError, ReadErrorDetail};
 use cronrunner::tokens::{CronJob, JobDescription, JobSection};
 
 use crate::cli::exit_status::ExitStatus;
 use crate::cli::output::Pager;
+use crate::cli::sources::{CrontabSources, CrontabSourcesError};
 use crate::cli::{args, job::Job, ui};
 
 #[cfg(not(tarpaulin_include))]
@@ -43,23 +44,27 @@ fn main() -> ExitStatus {
         }
     };
 
-    let mut crontab = match crontab::make_instance() {
-        Ok(crontab) => crontab,
-        Err(error) => return exit_from_crontab_read_error(&error),
+    let mut sources = if !config.crontab_files.is_empty() {
+        match CrontabSources::from_files(&config.crontab_files) {
+            Ok(sources) => sources,
+            Err(error) => return exit_from_crontab_sources_error(&error),
+        }
+    } else {
+        match crontab::make_instance() {
+            Ok(crontab) => CrontabSources::from_live_crontab(crontab),
+            Err(error) => return exit_from_crontab_read_error(&error),
+        }
     };
-    if let Some(env) = env {
-        crontab.set_env(env);
-    }
 
-    if !crontab.has_runnable_jobs() {
+    if !sources.has_runnable_jobs() {
         return exit_from_no_runnable_jobs();
     }
 
     if config.list_only {
         if config.as_json {
-            println!("{}", crontab.to_json());
+            println!("{}", sources.to_json());
         } else {
-            print_job_selection_menu(&crontab.jobs(), config.safe);
+            print_job_selection_menu(sources.documents(), config.safe);
         }
         return ExitStatus::Success;
     }
@@ -69,7 +74,7 @@ fn main() -> ExitStatus {
     } else if let Some(job) = read_job_selection_from_stdin(config.safe) {
         job
     } else {
-        print_job_selection_menu(&crontab.jobs(), config.safe);
+        print_job_selection_menu(sources.documents(), config.safe);
 
         match get_user_selection(config.safe) {
             Err(()) => return exit_from_invalid_job_selection(),
@@ -78,25 +83,24 @@ fn main() -> ExitStatus {
         }
     };
 
-    if job_selected == Job::Uid(42) && crontab.jobs().len() < 42 {
+    if job_selected == Job::Uid(42) && sources.jobs().len() < 42 {
         println!("What was the question again?");
         return ExitStatus::Success;
     }
 
-    let Some(job) = (match job_selected {
-        Job::Uid(job) => crontab.get_job_from_uid(job),
-        Job::Fingerprint(job) => crontab.get_job_from_fingerprint(job),
-        Job::Tag(tag) => crontab.get_job_from_tag(&tag),
-    }) else {
+    let Some((crontab, job)) = sources.select(&job_selected) else {
         return exit_from_invalid_job_selection();
     };
+    if let Some(env) = env {
+        crontab.set_env(env);
+    }
 
     println!("{} {}", ui::Color::highlight("$"), job.command);
 
     let res = if config.detach {
-        crontab.run_detached(job)
+        crontab.run_detached(&job)
     } else {
-        crontab.run(job)
+        crontab.run(&job)
     };
     exit_from_run_result(res)
 }
@@ -104,6 +108,16 @@ fn main() -> ExitStatus {
 fn exit_from_arguments_error(arg: &str) -> ExitStatus {
     eprintln!("{}", args::bad_arguments_error_message(arg));
     ExitStatus::ArgsError
+}
+
+fn exit_from_crontab_sources_error(error: &CrontabSourcesError) -> ExitStatus {
+    match error {
+        CrontabSourcesError::FileRead { .. } => {
+            eprintln!("{label}: {error}.", label = ui::Color::error("error"));
+            ExitStatus::Failure
+        }
+        CrontabSourcesError::DuplicateFile { .. } => exit_from_arguments_error(&error.to_string()),
+    }
 }
 
 fn try_parse_env_file_if_given(
@@ -209,40 +223,73 @@ fn read_job_selection_from_stdin(use_fingerprint: bool) -> Option<Job> {
 }
 
 #[cfg(not(tarpaulin_include))]
-fn print_job_selection_menu(jobs: &Vec<&CronJob>, use_fingerprint: bool) {
-    let entries = format_jobs_as_menu_entries(jobs, use_fingerprint);
+fn print_job_selection_menu(documents: &[Crontab], use_fingerprint: bool) {
+    let entries = format_jobs_as_menu_entries(documents, use_fingerprint);
     println!("{}", entries.join("\n"));
 }
 
-fn format_jobs_as_menu_entries(jobs: &Vec<&CronJob>, use_fingerprint: bool) -> Vec<String> {
+fn format_jobs_as_menu_entries(documents: &[Crontab], use_fingerprint: bool) -> Vec<String> {
+    let jobs_by_document: Vec<Vec<&CronJob>> = documents
+        .iter()
+        .map(Crontab::jobs)
+        .filter(|jobs| !jobs.is_empty())
+        .collect();
+    let jobs: Vec<&CronJob> = jobs_by_document.iter().flatten().copied().collect();
+    let has_sections = jobs.iter().any(|job| job.section.is_some());
     let mut menu = Vec::with_capacity(jobs.len());
 
     let mut last_section = None;
-    let max_id_width = determine_max_id_width(jobs, use_fingerprint);
+    let max_menu_id_width = determine_max_menu_id_width(&jobs, use_fingerprint);
 
-    for &job in jobs {
-        if let Some(new_section) = update_section_if_needed(job, &mut last_section) {
-            menu.push(format_job_section(new_section));
+    let mut documents = jobs_by_document.iter().peekable();
+    while let Some(document) = documents.next() {
+        for &job in document {
+            if let Some(new_section) = update_section_if_needed(job, &mut last_section) {
+                menu.push(format_job_section(new_section));
+            }
+
+            let number = if use_fingerprint {
+                format_job_fingerprint(job.fingerprint, max_menu_id_width)
+            } else {
+                format_job_uid(job.uid, max_menu_id_width)
+            };
+            let description = format_job_description(job.description.as_ref());
+            let schedule = format_job_schedule(&job.schedule);
+            let command = format_job_command(&job.command, !description.is_empty());
+
+            menu.push(format!("{number} {description}{schedule} {command}"));
         }
 
-        let number = if use_fingerprint {
-            format_job_fingerprint(job.fingerprint, max_id_width)
-        } else {
-            format_job_uid(job.uid, max_id_width)
-        };
-        let description = format_job_description(job.description.as_ref());
-        let schedule = format_job_schedule(&job.schedule);
-        let command = format_job_command(&job.command, !description.is_empty());
-
-        menu.push(format!("{number} {description}{schedule} {command}"));
+        if let Some(next_document) = documents.peek() {
+            close_section_if_needed(&mut menu, next_document, &mut last_section);
+        }
     }
 
-    add_spacing_to_menu_if_it_has_sections(&mut menu, last_section.is_some());
+    add_spacing_to_menu_if_it_has_sections(&mut menu, has_sections);
 
     menu
 }
 
-fn determine_max_id_width(jobs: &[&CronJob], use_fingerprint: bool) -> usize {
+fn close_section_if_needed(
+    menu: &mut Vec<String>,
+    next_document: &[&CronJob],
+    last_section: &mut Option<JobSection>,
+) {
+    // - Unsectioned -> Unsectioned: No blank line.
+    // - Sectioned   -> Unsectioned: Close section with blank line.
+    // - Unsectioned -> Sectioned: No blank line, section header provides spacing.
+    // - Sectioned   -> Sectioned: No blank line, section header provides spacing.
+    let previous_document_ended_in_section = last_section.take().is_some();
+    let next_document_starts_without_section = next_document
+        .first()
+        .is_some_and(|job| job.section.is_none());
+
+    if previous_document_ended_in_section && next_document_starts_without_section {
+        menu.push(String::new());
+    }
+}
+
+fn determine_max_menu_id_width(jobs: &[&CronJob], use_fingerprint: bool) -> usize {
     if use_fingerprint {
         jobs.iter()
             .map(|job| format!("{:x}", job.fingerprint).len())
@@ -269,8 +316,9 @@ fn format_job_section(section: &JobSection) -> String {
     format!("\n{}\n", ui::Color::title(&section.to_string()))
 }
 
-fn format_job_fingerprint(fingerprint: u64, max_uid_width: usize) -> String {
-    ui::Color::highlight(&format!("{fingerprint:0>max_uid_width$x}")).into_owned()
+fn format_job_fingerprint(fingerprint: u64, max_menu_id_width: usize) -> String {
+    // Space padding keeps fingerprints stable when files are added or reordered.
+    ui::Color::highlight(&format!("{fingerprint:>max_menu_id_width$x}")).into_owned()
 }
 
 fn format_job_uid(uid: usize, max_uid_width: usize) -> String {
@@ -367,9 +415,39 @@ fn exit_from_run_result(result: RunResult) -> ExitStatus {
 
 #[cfg(test)]
 mod tests {
+    use cronrunner::parser::Parser;
+    use cronrunner::tokens::Token;
+
     use super::*;
 
     const FIXTURES_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/");
+
+    fn format_single_document_jobs_as_menu_entries(
+        jobs: &[&CronJob],
+        use_fingerprint: bool,
+    ) -> Vec<String> {
+        let tokens = jobs
+            .iter()
+            .map(|job| Token::CronJob((*job).clone()))
+            .collect();
+        format_jobs_as_menu_entries(&[Crontab::new(tokens)], use_fingerprint)
+    }
+
+    fn menu_test_job(uid: usize, section: Option<JobSection>) -> CronJob {
+        CronJob {
+            uid,
+            fingerprint: uid as u64,
+            tag: None,
+            schedule: String::from("@hourly"),
+            command: format!("echo {uid}"),
+            description: None,
+            section,
+        }
+    }
+
+    fn job_document(job: CronJob) -> Crontab {
+        Crontab::new(vec![Token::CronJob(job)])
+    }
 
     #[test]
     fn exit_from_arguments_error_regular() {
@@ -535,7 +613,8 @@ mod tests {
             },
         ];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), false);
+        let entries =
+            format_single_document_jobs_as_menu_entries(&tokens.iter().collect::<Vec<_>>(), false);
 
         assert_eq!(
             entries,
@@ -573,7 +652,8 @@ mod tests {
             },
         ];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), true);
+        let entries =
+            format_single_document_jobs_as_menu_entries(&tokens.iter().collect::<Vec<_>>(), true);
 
         assert_eq!(
             entries,
@@ -626,7 +706,8 @@ mod tests {
             },
         ];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), false);
+        let entries =
+            format_single_document_jobs_as_menu_entries(&tokens.iter().collect::<Vec<_>>(), false);
 
         assert_eq!(
             entries,
@@ -639,6 +720,110 @@ mod tests {
                 String::new(),
             ]
         );
+    }
+
+    #[test]
+    fn format_menu_does_not_separate_unsectioned_documents() {
+        let documents = [
+            job_document(menu_test_job(1, None)),
+            job_document(menu_test_job(2, None)),
+        ];
+
+        let entries = format_jobs_as_menu_entries(&documents, false);
+
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].contains("echo 1"));
+        assert!(entries[1].contains("echo 2"));
+    }
+
+    #[test]
+    fn format_menu_closes_section_before_unsectioned_document() {
+        let documents = [
+            job_document(menu_test_job(
+                1,
+                Some(JobSection {
+                    uid: 1,
+                    title: String::from("First"),
+                }),
+            )),
+            job_document(menu_test_job(2, None)),
+        ];
+
+        let entries = format_jobs_as_menu_entries(&documents, false);
+
+        assert_eq!(entries.len(), 5);
+        assert!(entries[0].contains("First"));
+        assert!(entries[1].contains("echo 1"));
+        assert_eq!(entries[2], String::new());
+        assert!(entries[3].contains("echo 2"));
+        assert_eq!(entries[4], String::new());
+    }
+
+    #[test]
+    fn format_menu_uses_section_spacing_after_unsectioned_document() {
+        let documents = [
+            job_document(menu_test_job(1, None)),
+            job_document(menu_test_job(
+                2,
+                Some(JobSection {
+                    uid: 1,
+                    title: String::from("Second"),
+                }),
+            )),
+        ];
+
+        let entries = format_jobs_as_menu_entries(&documents, false);
+
+        assert_eq!(entries.len(), 4);
+        assert!(entries[0].contains("echo 1"));
+        assert!(entries[1].contains("Second"));
+        assert!(entries[2].contains("echo 2"));
+        assert_eq!(entries[3], String::new());
+    }
+
+    #[test]
+    fn format_menu_does_not_duplicate_spacing_between_sectioned_documents() {
+        let documents = [
+            job_document(menu_test_job(
+                1,
+                Some(JobSection {
+                    uid: 1,
+                    title: String::from("First"),
+                }),
+            )),
+            job_document(menu_test_job(
+                2,
+                Some(JobSection {
+                    uid: 2,
+                    title: String::from("Second"),
+                }),
+            )),
+        ];
+
+        let entries = format_jobs_as_menu_entries(&documents, false);
+
+        assert_eq!(entries.len(), 5);
+        assert!(entries[0].contains("First"));
+        assert!(entries[1].contains("echo 1"));
+        assert!(entries[2].contains("Second"));
+        assert!(entries[3].contains("echo 2"));
+        assert_eq!(entries[4], String::new());
+    }
+
+    #[test]
+    fn format_menu_ignores_empty_documents_between_unsectioned_documents() {
+        let documents = [
+            job_document(menu_test_job(1, None)),
+            Crontab::new(Vec::new()),
+            Crontab::new(Parser::parse("FOO=bar")),
+            job_document(menu_test_job(2, None)),
+        ];
+
+        let entries = format_jobs_as_menu_entries(&documents, false);
+
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].contains("echo 1"));
+        assert!(entries[1].contains("echo 2"));
     }
 
     #[test]
@@ -673,7 +858,8 @@ mod tests {
             },
         ];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), false);
+        let entries =
+            format_single_document_jobs_as_menu_entries(&tokens.iter().collect::<Vec<_>>(), false);
 
         assert!(entries[0].starts_with("\u{1b}[0;92m  1.\u{1b}[0m"));
         assert!(entries[1].starts_with("\u{1b}[0;92m108.\u{1b}[0m"));
@@ -681,7 +867,7 @@ mod tests {
     }
 
     #[test]
-    fn job_uid_alignment_with_fingerprint() {
+    fn job_fingerprint_alignment_uses_spaces() {
         let tokens = [
             CronJob {
                 uid: 1,
@@ -712,11 +898,54 @@ mod tests {
             },
         ];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), true);
+        let entries =
+            format_single_document_jobs_as_menu_entries(&tokens.iter().collect::<Vec<_>>(), true);
 
-        assert!(entries[0].starts_with("\u{1b}[0;92m001\u{1b}[0m"));
+        assert!(entries[0].starts_with("\u{1b}[0;92m  1\u{1b}[0m"));
         assert!(entries[1].starts_with("\u{1b}[0;92m539\u{1b}[0m"));
-        assert!(entries[2].starts_with("\u{1b}[0;92m00c\u{1b}[0m"));
+        assert!(entries[2].starts_with("\u{1b}[0;92m  c\u{1b}[0m"));
+    }
+
+    #[test]
+    fn fingerprint_token_does_not_depend_on_other_jobs() {
+        fn fingerprint_token(entry: &str) -> &str {
+            entry
+                .strip_prefix("\u{1b}[0;92m")
+                .unwrap()
+                .split_once("\u{1b}[0m")
+                .unwrap()
+                .0
+                .trim_start()
+        }
+
+        let short_job = CronJob {
+            uid: 1,
+            fingerprint: 0x94_b1_9a_b6_8c_84_11,
+            tag: None,
+            schedule: String::from("@hourly"),
+            command: String::from("echo 'short'"),
+            description: None,
+            section: None,
+        };
+        let wide_job = CronJob {
+            uid: 2,
+            fingerprint: u64::MAX,
+            tag: None,
+            schedule: String::from("@hourly"),
+            command: String::from("echo 'wide'"),
+            description: None,
+            section: None,
+        };
+
+        let alone = format_single_document_jobs_as_menu_entries(&[&short_job], true);
+        let with_wide_job =
+            format_single_document_jobs_as_menu_entries(&[&short_job, &wide_job], true);
+
+        assert_eq!(fingerprint_token(&alone[0]), "94b19ab68c8411");
+        assert_eq!(
+            fingerprint_token(&alone[0]),
+            fingerprint_token(&with_wide_job[0])
+        );
     }
 
     #[test]
@@ -731,7 +960,8 @@ mod tests {
             section: None,
         }];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), false);
+        let entries =
+            format_single_document_jobs_as_menu_entries(&tokens.iter().collect::<Vec<_>>(), false);
 
         assert_eq!(
             entries,
@@ -753,7 +983,8 @@ mod tests {
             section: None,
         }];
 
-        let entries = format_jobs_as_menu_entries(&tokens.iter().collect(), true);
+        let entries =
+            format_single_document_jobs_as_menu_entries(&tokens.iter().collect::<Vec<_>>(), true);
 
         assert_eq!(
             entries,
@@ -906,5 +1137,28 @@ mod tests {
         let exit_code = exit_from_run_result(result);
 
         assert_eq!(exit_code, ExitStatus::Success);
+    }
+
+    #[test]
+    fn exit_from_crontab_sources_file_read_error_is_failure() {
+        let error = CrontabSourcesError::FileRead {
+            path: PathBuf::from("missing.cron"),
+            source: io::Error::new(io::ErrorKind::NotFound, "missing"),
+        };
+
+        assert_eq!(exit_from_crontab_sources_error(&error), ExitStatus::Failure);
+    }
+
+    #[test]
+    fn exit_from_duplicate_crontab_source_error_is_arguments_error() {
+        let error = CrontabSourcesError::DuplicateFile {
+            path: PathBuf::from("./example.cron"),
+            first_path: PathBuf::from("example.cron"),
+        };
+
+        assert_eq!(
+            exit_from_crontab_sources_error(&error),
+            ExitStatus::ArgsError
+        );
     }
 }

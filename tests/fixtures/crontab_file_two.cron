@@ -1,0 +1,2 @@
+## %{second} Second file job.
+@daily test -z "${FIRST_ONLY+x}"

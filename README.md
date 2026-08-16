@@ -39,14 +39,16 @@ Run cron jobs manually.
 Usage: crn [OPTIONS] [ID]
 
 Options:
-  -h, --help           Show this message and exit.
-  -V, --version        Show the version and exit.
   -l, --list-only      List available jobs and exit.
       --as-json        Render `--list-only` as JSON.
   -s, --safe           Use job fingerprints.
   -t, --tag <TAG>      Run specific tag.
   -d, --detach         Run job in the background.
   -e, --env <FILE>     Override job environment.
+  -f, --file <FILE>    Read jobs from a file (repeatable).
+
+  -h, --help           Show this message and exit.
+  -V, --version        Show the version and exit.
 ```
 
 ### Examples
@@ -160,6 +162,20 @@ the child process:
 $ crn --env ~/.cron.env 3
 Running...
 ```
+
+### Crontab source
+
+By default, jobs are read from the current user's crontab through
+`crontab -l`. To read it from an arbitrary file, pass `--file`:
+
+```console
+$ crn --file ./crontab.export --list-only
+$ crn -f personal.cron -f project.cron
+```
+
+If you pass multiple file sources, they are read and run in isolation.
+Variables from one crontab don't leak into the other, and safe mode
+fingerprints remain stable even if you reorder the sources.
 
 ### Configuration
 

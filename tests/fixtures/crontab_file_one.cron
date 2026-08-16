@@ -1,0 +1,6 @@
+FIRST_ONLY=secret
+
+### Shared section
+
+## %{first} First file job.
+@daily :

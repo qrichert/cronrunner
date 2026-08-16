@@ -15,6 +15,7 @@ pub struct Config {
     pub tag: bool,
     pub detach: bool,
     pub env_file: Option<PathBuf>,
+    pub crontab_files: Vec<PathBuf>,
     pub job: Option<Job>,
 }
 
@@ -77,6 +78,14 @@ impl Config {
                 }
             }
 
+            if arg == "-f" || arg == "--file" {
+                let Some(file) = iter.next().map(PathBuf::from) else {
+                    return Err(format!("Expected file path after '{arg}'"));
+                };
+                config.crontab_files.push(file);
+                continue;
+            }
+
             if config.tag {
                 config.job = Some(Job::Tag(arg));
                 break;
@@ -134,14 +143,16 @@ pub fn help_message() -> String {
 Usage: {bin} [OPTIONS] [ID]
 
 Options:
-  -h, --help           Show this message and exit.
-  -V, --version        Show the version and exit.
   -l, --list-only      List available jobs and exit.
       --as-json        Render `--list-only` as JSON.
   -s, --safe           Use job fingerprints.
   -t, --tag <TAG>      Run specific tag.
   -d, --detach         Run job in the background.
   -e, --env <FILE>     Override job environment.
+  -f, --file <FILE>    Read jobs from a file (repeatable).
+
+  -h, --help           Show this message and exit.
+  -V, --version        Show the version and exit.
 ",
         description = env!("CARGO_PKG_DESCRIPTION"),
         bin = env!("CARGO_BIN_NAME"),
@@ -244,6 +255,17 @@ Environment:
       {highlight}${reset} {bin} --env ~/.cron.env 3
       Running...
 
+Crontab source:
+  By default, jobs are read from the current user's crontab through
+  `crontab -l`. To read it from an arbitrary file, pass `--file`:
+
+      {highlight}${reset} {bin} --file ./crontab.export --list-only
+      {highlight}${reset} {bin} -f personal.cron -f project.cron
+
+  If you pass multiple file sources, they are read and run in isolation.
+  Variables from one crontab don't leak into the other, and safe mode
+  fingerprints remain stable even if you reorder the sources.
+
 Configuration:
   Some arguments have corresponding environment variables, allowing you
   to set values permanently in a shell startup file (e.g., `~/.bashrc`).
@@ -308,6 +330,7 @@ mod tests {
                 tag: false,
                 detach: false,
                 env_file: None,
+                crontab_files: Vec::new(),
                 job: None,
             }
         );
@@ -392,6 +415,7 @@ mod tests {
         assert!(message.contains("-t, --tag"));
         assert!(message.contains("-d, --detach"));
         assert!(message.contains("-e, --env <FILE>"));
+        assert!(message.contains("-f, --file <FILE>"));
     }
 
     #[test]
@@ -771,6 +795,67 @@ mod tests {
         let err = Config::build_from_args(args).unwrap_err();
 
         assert_eq!(err, "Expected file path after '--env'");
+    }
+
+    #[test]
+    fn argument_file() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--file"),
+            String::from("./personal.cron"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert_eq!(config.crontab_files, [PathBuf::from("./personal.cron")]);
+    }
+
+    #[test]
+    fn argument_file_shorthand() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("-f"),
+            String::from("./personal.cron"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert_eq!(config.crontab_files, [PathBuf::from("./personal.cron")]);
+    }
+
+    #[test]
+    fn argument_file_is_repeatable_and_continues_after_match() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--file"),
+            String::from("personal.cron"),
+            String::from("-f"),
+            String::from("project.cron"),
+            String::from("--list-only"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert_eq!(
+            config.crontab_files,
+            [
+                PathBuf::from("personal.cron"),
+                PathBuf::from("project.cron")
+            ]
+        );
+        assert!(config.list_only);
+    }
+
+    #[test]
+    fn argument_file_requires_file() {
+        let args = [String::from("/usr/local/bin/crn"), String::from("--file")].into_iter();
+
+        let err = Config::build_from_args(args).unwrap_err();
+
+        assert_eq!(err, "Expected file path after '--file'");
     }
 
     #[test]

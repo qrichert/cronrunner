@@ -16,14 +16,16 @@ use super::tokens::{
 /// code clarity.
 struct ParserState {
     tokens: Vec<Token>,
-    job_uid: usize,
+    next_job_uid: usize,
     job_section: Option<JobSection>,
+    document_hash: Option<u64>,
 }
 
 /// Parse crontab into usable tokens.
 ///
-/// [`Parser`] only provides the [`parse()`](Parser::parse()) function
-/// that outputs [`Token`]s.
+/// [`Parser`] outputs [`Token`]s from ordinary crontabs with
+/// [`parse()`](Parser::parse()), or from identified documents with
+/// [`parse_with_document_id()`](Parser::parse_with_document_id()).
 ///
 /// To read the current user's crontab, you can use
 /// [`Reader::read()`](super::Reader::read()).
@@ -64,10 +66,39 @@ impl Parser {
     /// if a line is not something [`Parser`] understands.
     #[must_use]
     pub fn parse(crontab: &str) -> Vec<Token> {
+        Self::parse_inner(crontab, None)
+    }
+
+    /// Parse a crontab document into usable tokens.
+    ///
+    /// The difference with [`Parser::parse()`] is that the caller must
+    /// provide a unique and stable `document_identifier`, which is then
+    /// used to derive job fingerprints (typically, use the canonical
+    /// file path of the document).
+    ///
+    /// Without `document_id`, two identical jobs from two different
+    /// documents would produce the same hash, making the selection
+    /// ambiguous. This is a problem because while the jobs themselves
+    /// are identical (same command and position), their environments
+    /// may differ, and so they don't necessarily do the same thing.
+    ///
+    /// # Errors
+    ///
+    /// This function does not `Err`. Worst case scenario an empty `Vec`
+    /// is returned (empty crontab) or [`Unknown`] tokens are produced
+    /// if a line is not something [`Parser`] understands.
+    #[must_use]
+    pub fn parse_with_document_id(crontab: &str, document_identifier: &[u8]) -> Vec<Token> {
+        let document_hash = hash::djb2(document_identifier);
+        Self::parse_inner(crontab, Some(document_hash))
+    }
+
+    fn parse_inner(crontab: &str, document_hash: Option<u64>) -> Vec<Token> {
         let mut state = ParserState {
             tokens: Vec::new(),
-            job_uid: 1,
+            next_job_uid: 1,
             job_section: None,
+            document_hash,
         };
 
         for mut line in crontab.lines() {
@@ -104,7 +135,7 @@ impl Parser {
     fn make_token_from_job_line(line: &str, state: &mut ParserState) -> Token {
         match Self::make_job_token(line, state) {
             Ok(job_token @ Token::CronJob { .. }) => {
-                state.job_uid += 1;
+                state.next_job_uid += 1;
                 job_token
             }
             Ok(ignored_job) => ignored_job,
@@ -134,8 +165,8 @@ impl Parser {
             }));
         }
 
-        let uid = state.job_uid;
-        let fingerprint = hash::djb2(format!("uid({uid}),command({command})"));
+        let uid = state.next_job_uid;
+        let fingerprint = Self::make_job_fingerprint(uid, &command, state.document_hash);
 
         Ok(Token::CronJob(CronJob {
             uid,
@@ -146,6 +177,15 @@ impl Parser {
             description,
             section,
         }))
+    }
+
+    fn make_job_fingerprint(uid: usize, command: &str, document_hash: Option<u64>) -> u64 {
+        let string_identifier = if let Some(document_hash) = document_hash {
+            format!("document({document_hash}),uid({uid}),command({command})")
+        } else {
+            format!("uid({uid}),command({command})")
+        };
+        hash::djb2(string_identifier)
     }
 
     /// Split schedule and command parts of a job line.
@@ -605,6 +645,98 @@ mod tests {
         assert_eq!(job_0.fingerprint, 2_907_059_941_167_361_582);
         assert_eq!(job_1.fingerprint, 4_461_213_176_276_726_319);
         assert_eq!(job_2.fingerprint, 6_015_366_411_386_091_056);
+    }
+
+    #[test]
+    fn document_fingerprint_golden_value() {
+        let tokens = Parser::parse_with_document_id("@hourly echo hello", b"/tmp/example.cron");
+        let Token::CronJob(job) = &tokens[0] else {
+            panic!()
+        };
+
+        assert_eq!(job.fingerprint, 3_725_737_307_382_316_323);
+    }
+
+    #[test]
+    fn document_fingerprint_differs_from_ordinary_fingerprint() {
+        let ordinary = Parser::parse("@hourly echo hello");
+        let document = Parser::parse_with_document_id("@hourly echo hello", b"document");
+        let Token::CronJob(ordinary_job) = &ordinary[0] else {
+            panic!()
+        };
+        let Token::CronJob(document_job) = &document[0] else {
+            panic!()
+        };
+
+        assert_ne!(document_job.fingerprint, ordinary_job.fingerprint);
+    }
+
+    #[test]
+    fn document_fingerprint_is_stable_for_the_same_identifier() {
+        let first = Parser::parse_with_document_id("@hourly echo hello", b"document");
+        let second = Parser::parse_with_document_id("@hourly echo hello", b"document");
+        let Token::CronJob(first_job) = &first[0] else {
+            panic!()
+        };
+        let Token::CronJob(second_job) = &second[0] else {
+            panic!()
+        };
+
+        assert_eq!(first_job.fingerprint, second_job.fingerprint);
+    }
+
+    #[test]
+    fn document_fingerprint_changes_with_the_identifier() {
+        let first = Parser::parse_with_document_id("@hourly echo hello", b"first");
+        let second = Parser::parse_with_document_id("@hourly echo hello", b"second");
+        let Token::CronJob(first_job) = &first[0] else {
+            panic!()
+        };
+        let Token::CronJob(second_job) = &second[0] else {
+            panic!()
+        };
+
+        assert_ne!(first_job.fingerprint, second_job.fingerprint);
+    }
+
+    #[test]
+    fn document_fingerprint_only_changes_for_content_before_the_job() {
+        let original = Parser::parse_with_document_id("@hourly echo hello", b"document");
+        let appended =
+            Parser::parse_with_document_id("@hourly echo hello\n@daily echo later", b"document");
+        let prepended =
+            Parser::parse_with_document_id("@daily echo earlier\n@hourly echo hello", b"document");
+        let Token::CronJob(original_job) = &original[0] else {
+            panic!()
+        };
+        let Token::CronJob(appended_job) = &appended[0] else {
+            panic!()
+        };
+        let Token::CronJob(prepended_job) = &prepended[1] else {
+            panic!()
+        };
+
+        assert_eq!(original_job.fingerprint, appended_job.fingerprint);
+        assert_ne!(original_job.fingerprint, prepended_job.fingerprint);
+    }
+
+    #[test]
+    fn documents_do_not_share_description_or_section_state() {
+        let first = Parser::parse_with_document_id(
+            "### First section\n@hourly echo first\n## Trailing description",
+            b"first",
+        );
+        let second = Parser::parse_with_document_id("@daily echo second", b"second");
+        let Token::CronJob(first_job) = &first[1] else {
+            panic!()
+        };
+        let Token::CronJob(second_job) = &second[0] else {
+            panic!()
+        };
+
+        assert!(first_job.section.is_some());
+        assert!(second_job.description.is_none());
+        assert!(second_job.section.is_none());
     }
 
     #[test]
