@@ -239,7 +239,8 @@ fn format_jobs_as_menu_entries(documents: &[Crontab], use_fingerprint: bool) -> 
     let mut menu = Vec::with_capacity(jobs.len());
 
     let mut last_section = None;
-    let max_menu_id_width = determine_max_menu_id_width(&jobs, use_fingerprint);
+    // Only used to right-align UIDs; fingerprints are fixed-width.
+    let max_uid_width = determine_max_uid_width(&jobs);
 
     let mut documents = jobs_by_document.iter().peekable();
     while let Some(document) = documents.next() {
@@ -249,9 +250,9 @@ fn format_jobs_as_menu_entries(documents: &[Crontab], use_fingerprint: bool) -> 
             }
 
             let number = if use_fingerprint {
-                format_job_fingerprint(job.fingerprint, max_menu_id_width)
+                format_job_fingerprint(job.fingerprint)
             } else {
-                format_job_uid(job.uid, max_menu_id_width)
+                format_job_uid(job.uid, max_uid_width)
             };
             let description = format_job_description(job.description.as_ref());
             let schedule = format_job_schedule(&job.schedule);
@@ -289,16 +290,9 @@ fn close_section_if_needed(
     }
 }
 
-fn determine_max_menu_id_width(jobs: &[&CronJob], use_fingerprint: bool) -> usize {
-    if use_fingerprint {
-        jobs.iter()
-            .map(|job| format!("{:x}", job.fingerprint).len())
-            .max()
-            .unwrap_or(0)
-    } else {
-        let max_uid = jobs.iter().map(|job| job.uid).max().unwrap_or(0);
-        max_uid.to_string().len()
-    }
+fn determine_max_uid_width(jobs: &[&CronJob]) -> usize {
+    let max_uid = jobs.iter().map(|job| job.uid).max().unwrap_or(0);
+    max_uid.to_string().len()
 }
 
 fn update_section_if_needed<'a>(
@@ -316,9 +310,11 @@ fn format_job_section(section: &JobSection) -> String {
     format!("\n{}\n", ui::Color::title(&section.to_string()))
 }
 
-fn format_job_fingerprint(fingerprint: u64, max_menu_id_width: usize) -> String {
-    // Space padding keeps fingerprints stable when files are added or reordered.
-    ui::Color::highlight(&format!("{fingerprint:>max_menu_id_width$x}")).into_owned()
+fn format_job_fingerprint(fingerprint: u64) -> String {
+    // Fixed 16-wide (full u64) so every fingerprint is the same length and stays
+    // stable regardless of what else is loaded. Leading zeros don't affect
+    // selection: input is parsed as hex, so `0094…` and `94…` are the same job.
+    ui::Color::highlight(&format!("{fingerprint:016x}")).into_owned()
 }
 
 fn format_job_uid(uid: usize, max_uid_width: usize) -> String {
@@ -659,10 +655,10 @@ mod tests {
             entries,
             vec![
                 String::from(
-                    "\u{1b}[0;92mcc1dae\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'hello, world'"
+                    "\u{1b}[0;92m0000000000cc1dae\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo 'hello, world'"
                 ),
                 String::from(
-                    "\u{1b}[0;92m12d687\u{1b}[0m This job has a description \u{1b}[0;90m@monthly\u{1b}[0m \u{1b}[0;90mecho 'buongiorno'\u{1b}[0m"
+                    "\u{1b}[0;92m000000000012d687\u{1b}[0m This job has a description \u{1b}[0;90m@monthly\u{1b}[0m \u{1b}[0;90mecho 'buongiorno'\u{1b}[0m"
                 ),
             ]
         );
@@ -867,7 +863,7 @@ mod tests {
     }
 
     #[test]
-    fn job_fingerprint_alignment_uses_spaces() {
+    fn job_fingerprint_is_fixed_width_zero_padded() {
         let tokens = [
             CronJob {
                 uid: 1,
@@ -901,9 +897,9 @@ mod tests {
         let entries =
             format_single_document_jobs_as_menu_entries(&tokens.iter().collect::<Vec<_>>(), true);
 
-        assert!(entries[0].starts_with("\u{1b}[0;92m  1\u{1b}[0m"));
-        assert!(entries[1].starts_with("\u{1b}[0;92m539\u{1b}[0m"));
-        assert!(entries[2].starts_with("\u{1b}[0;92m  c\u{1b}[0m"));
+        assert!(entries[0].starts_with("\u{1b}[0;92m0000000000000001\u{1b}[0m"));
+        assert!(entries[1].starts_with("\u{1b}[0;92m0000000000000539\u{1b}[0m"));
+        assert!(entries[2].starts_with("\u{1b}[0;92m000000000000000c\u{1b}[0m"));
     }
 
     #[test]
@@ -941,7 +937,7 @@ mod tests {
         let with_wide_job =
             format_single_document_jobs_as_menu_entries(&[&short_job, &wide_job], true);
 
-        assert_eq!(fingerprint_token(&alone[0]), "94b19ab68c8411");
+        assert_eq!(fingerprint_token(&alone[0]), "0094b19ab68c8411");
         assert_eq!(
             fingerprint_token(&alone[0]),
             fingerprint_token(&with_wide_job[0])
@@ -989,7 +985,7 @@ mod tests {
         assert_eq!(
             entries,
             vec![String::from(
-                "\u{1b}[0;92mcc1dae\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo '¡hola!'"
+                "\u{1b}[0;92m0000000000cc1dae\u{1b}[0m \u{1b}[0;90m@hourly\u{1b}[0m echo '¡hola!'"
             )]
         );
     }
