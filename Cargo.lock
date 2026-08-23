@@ -5,3 +5,12 @@ version = 4
 [[package]]
 name = "cronrunner"
 version = "2.17.0"
+dependencies = [
+ "lessify",
+]
+
+[[package]]
+name = "lessify"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76f085128bedce805586967170ca915ac639b52cf67b508ac898e8207cc88216"

@@ -5,12 +5,13 @@ use std::env;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
+use lessify::Pager;
+
 use cronrunner::crontab::{self, Crontab, RunResult, RunResultDetail};
 use cronrunner::reader::{ReadError, ReadErrorDetail};
 use cronrunner::tokens::{CronJob, JobDescription, JobSection};
 
 use crate::cli::exit_status::ExitStatus;
-use crate::cli::output::Pager;
 use crate::cli::sources::{CrontabSources, CrontabSourcesError};
 use crate::cli::{args, job::Job, ui};
 
