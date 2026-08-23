@@ -5,18 +5,112 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::PathBuf;
 
 use cronrunner::crontab::Crontab;
-use cronrunner::parser::Parser;
+use cronrunner::parser::{Kind, Parser};
 use cronrunner::tokens::{CronJob, Token};
 
 use super::job::Job;
 
+/// File source for a crontab.
+///
+/// This encodes the kind (normal crontab vs. system crontab). `kind`
+/// is private, so the only way to instantiate it is through the
+/// explicit [`InputFile::from_crontab()`] and
+/// [`InputFile::from_system()`] methods, making it hard to misuse.
+#[derive(Debug, Eq, PartialEq)]
+pub struct InputFile {
+    /// Whether it's a normal crontab or a system crontab.
+    kind: Kind,
+    /// The path to the file. It _must_ be private, otherwise it could
+    /// make `kind` lie if it was mutable.
+    path: PathBuf,
+}
+
+impl InputFile {
+    /// Create and instance from a regular crontab file.
+    pub fn from_crontab(path: PathBuf) -> Self {
+        Self {
+            kind: Kind::User,
+            path,
+        }
+    }
+
+    /// Create and instance from a system crontab file.
+    pub fn from_system(path: PathBuf) -> Self {
+        Self {
+            kind: Kind::System,
+            path,
+        }
+    }
+}
+
+impl InputFile {
+    /// The path to the file.
+    ///
+    /// We only allow non-mutable references because if we allowed
+    /// mutation, it could make `kind` lie if the underlying changes.
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+}
+
+/// A normalized crontab file source that knows its kind.
+///
+/// It's the counterpart of [`InputFile`] once read and validated.
 #[derive(Debug)]
 struct CrontabFile {
+    /// Whether it's a normal crontab or a system crontab.
+    kind: Kind,
+    /// Path as given by user, used in error messages.
     path: PathBuf,
+    /// Canonicalized path, used as document identifier and for dedup.
     canonical_path: PathBuf,
+    /// Contents of the file, used by the parser.
     contents: String,
 }
 
+impl CrontabFile {
+    /// Derive document identifier (bytes) from canonical path.
+    fn document_id(&self) -> &[u8] {
+        self.canonical_path.as_os_str().as_bytes()
+    }
+
+    /// Parse a crontab file into a [`Crontab`].
+    ///
+    /// This method abstracts away the parsing split on kind, it knows
+    /// how to parse itself.
+    fn parse(&self) -> Crontab {
+        let document_id = self.document_id();
+        let tokens: Vec<Token> = match self.kind {
+            Kind::User => Parser::parse_with_document_id(&self.contents, document_id),
+            Kind::System => Parser::parse_system_with_document_id(&self.contents, document_id),
+        };
+        Crontab::new(tokens)
+    }
+}
+
+impl TryFrom<&InputFile> for CrontabFile {
+    type Error = std::io::Error;
+
+    /// Convert an [`InputFile`] into a [`CrontabFile`].
+    ///
+    /// Same idea as [`CrontabFile::parse()`]: [`CrontabFile`] knows how
+    /// to build itself from [`InputFile`], and it keeps the `kind`
+    /// shenanigans encapsulated.
+    fn try_from(file: &InputFile) -> Result<Self, Self::Error> {
+        let path = file.path();
+        let canonical_path = std::fs::canonicalize(path)?;
+        let contents = std::fs::read_to_string(&canonical_path)?;
+
+        Ok(Self {
+            kind: file.kind,
+            path: path.clone(),
+            canonical_path,
+            contents,
+        })
+    }
+}
+
+// TODO: We should align those with `crontab::ReadError`.
 #[derive(Debug)]
 pub enum CrontabSourcesError {
     FileRead { path: PathBuf, source: io::Error },
@@ -48,117 +142,21 @@ impl Error for CrontabSourcesError {
     }
 }
 
+/// Abstraction over a set of [`Crontab`]s.
+///
+/// We allow sourcing crontabs from multiple files; we don't work with
+/// one [`Crontab`], but with multiple. [`CrontabSources`] lets us work
+/// with this set of crontabs as if we were working with one,
+/// abstracting all the `.iter()`s away.
+///
+/// [`CrontabSources`] is constructed from a set of [`InputFile`]s. And
+/// uses its own file representation under the hood ([`CrontabFile`]).
 #[derive(Debug)]
 pub struct CrontabSources {
     sources: Vec<Crontab>,
 }
 
 impl CrontabSources {
-    pub fn from_live_crontab(crontab: Crontab) -> Self {
-        Self {
-            sources: vec![crontab],
-        }
-    }
-
-    pub fn from_files(files: &[PathBuf]) -> Result<Self, CrontabSourcesError> {
-        let files = Self::try_read_files(files)?;
-        if let Some(error) = Self::find_duplicate_file(&files) {
-            return Err(error);
-        }
-
-        let crontabs = files
-            .into_iter()
-            .map(|file| {
-                // Use canonical file path as document identifier.
-                let document_id: &[u8] = file.canonical_path.as_os_str().as_bytes();
-                let tokens: Vec<Token> =
-                    Parser::parse_with_document_id(&file.contents, document_id);
-                Crontab::new(tokens)
-            })
-            .collect();
-        Ok(Self::from_file_crontabs(crontabs))
-    }
-
-    fn try_read_files(files: &[PathBuf]) -> Result<Vec<CrontabFile>, CrontabSourcesError> {
-        files
-            .iter()
-            .map(|path| {
-                let canonical_path = std::fs::canonicalize(path).map_err(|source| {
-                    CrontabSourcesError::FileRead {
-                        path: path.clone(),
-                        source,
-                    }
-                })?;
-                let contents = std::fs::read_to_string(&canonical_path).map_err(|source| {
-                    CrontabSourcesError::FileRead {
-                        path: path.clone(),
-                        source,
-                    }
-                })?;
-
-                Ok(CrontabFile {
-                    path: path.clone(),
-                    canonical_path,
-                    contents,
-                })
-            })
-            .collect()
-    }
-
-    fn find_duplicate_file(files: &[CrontabFile]) -> Option<CrontabSourcesError> {
-        for (index, file) in files.iter().enumerate() {
-            if let Some(first) = files[..index]
-                .iter()
-                .find(|first| first.canonical_path == file.canonical_path)
-            {
-                return Some(CrontabSourcesError::DuplicateFile {
-                    path: file.path.clone(),
-                    first_path: first.path.clone(),
-                });
-            }
-        }
-        None
-    }
-
-    fn from_file_crontabs(mut sources: Vec<Crontab>) -> Self {
-        let mut next_job_uid = 1;
-        let mut section_uid_offset = 0;
-
-        for source in &mut sources {
-            let max_local_section_uid = source
-                .tokens
-                .iter()
-                .filter_map(|token| match token {
-                    Token::CronJob(job) => job.section.as_ref(),
-                    Token::IgnoredJob(job) => job.section.as_ref(),
-                    _ => None,
-                })
-                .map(|section| section.uid)
-                .max()
-                .unwrap_or(0);
-
-            for token in &mut source.tokens {
-                let section = match token {
-                    Token::CronJob(job) => {
-                        job.uid = next_job_uid;
-                        next_job_uid += 1;
-                        job.section.as_mut()
-                    }
-                    Token::IgnoredJob(job) => job.section.as_mut(),
-                    _ => None,
-                };
-
-                if let Some(section) = section {
-                    section.uid += section_uid_offset;
-                }
-            }
-
-            section_uid_offset += max_local_section_uid;
-        }
-
-        Self { sources }
-    }
-
     pub fn has_runnable_jobs(&self) -> bool {
         self.sources.iter().any(Crontab::has_runnable_jobs)
     }
@@ -196,11 +194,103 @@ impl CrontabSources {
     }
 }
 
+impl TryFrom<&[InputFile]> for CrontabSources {
+    type Error = CrontabSourcesError;
+
+    /// Create an instance from a list of [`InputFile`]s.
+    fn try_from(files: &[InputFile]) -> Result<Self, Self::Error> {
+        let files: Vec<CrontabFile> = try_read_files(files)?;
+        if let Some(error) = find_duplicate_files(&files) {
+            return Err(error);
+        }
+        let crontabs: Vec<Crontab> = files.iter().map(CrontabFile::parse).collect();
+        Ok(crontabs.into())
+    }
+}
+
+fn try_read_files(files: &[InputFile]) -> Result<Vec<CrontabFile>, CrontabSourcesError> {
+    files
+        .iter()
+        .map(|file| {
+            CrontabFile::try_from(file).map_err(|source| CrontabSourcesError::FileRead {
+                path: file.path.clone(),
+                source,
+            })
+        })
+        .collect()
+}
+
+fn find_duplicate_files(files: &[CrontabFile]) -> Option<CrontabSourcesError> {
+    for (index, file) in files.iter().enumerate() {
+        if let Some(first) = files[..index]
+            .iter()
+            .find(|first| first.canonical_path == file.canonical_path)
+        {
+            return Some(CrontabSourcesError::DuplicateFile {
+                path: file.path.clone(),
+                first_path: first.path.clone(),
+            });
+        }
+    }
+    None
+}
+
+impl From<Crontab> for CrontabSources {
+    /// Create an instance from a single [`Crontab`] entry.
+    fn from(crontab: Crontab) -> Self {
+        Self {
+            sources: vec![crontab],
+        }
+    }
+}
+
+impl From<Vec<Crontab>> for CrontabSources {
+    /// Create an instance from a list of [`Crontab`] entries.
+    fn from(mut sources: Vec<Crontab>) -> Self {
+        let mut next_job_uid = 1;
+        let mut section_uid_offset = 0;
+
+        for source in &mut sources {
+            let max_local_section_uid = source
+                .tokens
+                .iter()
+                .filter_map(|token| match token {
+                    Token::CronJob(job) => job.section.as_ref(),
+                    Token::IgnoredJob(job) => job.section.as_ref(),
+                    _ => None,
+                })
+                .map(|section| section.uid)
+                .max()
+                .unwrap_or(0);
+
+            for token in &mut source.tokens {
+                let section = match token {
+                    Token::CronJob(job) => {
+                        job.uid = next_job_uid;
+                        next_job_uid += 1;
+                        job.section.as_mut()
+                    }
+                    Token::IgnoredJob(job) => job.section.as_mut(),
+                    _ => None,
+                };
+
+                if let Some(section) = section {
+                    section.uid += section_uid_offset;
+                }
+            }
+
+            section_uid_offset += max_local_section_uid;
+        }
+
+        Self { sources }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
-    use cronrunner::parser::Parser;
+    use cronrunner::parser::{Kind, Parser};
     use cronrunner::tokens::{CronJob, JobSection};
 
     use super::*;
@@ -218,7 +308,12 @@ mod tests {
         }
         std::os::unix::fs::symlink(&absolute, &symlink).unwrap();
 
-        let files = CrontabSources::try_read_files(&[relative, absolute.clone(), symlink]).unwrap();
+        let files = try_read_files(&[
+            InputFile::from_crontab(relative),
+            InputFile::from_crontab(absolute.clone()),
+            InputFile::from_crontab(symlink),
+        ])
+        .unwrap();
 
         assert_eq!(files[0].canonical_path, absolute);
         assert_eq!(files[1].canonical_path, files[0].canonical_path);
@@ -230,18 +325,20 @@ mod tests {
         let canonical_path = PathBuf::from("/tmp/example.cron");
         let files = [
             CrontabFile {
+                kind: Kind::User,
                 path: PathBuf::from("example.cron"),
                 canonical_path: canonical_path.clone(),
                 contents: String::new(),
             },
             CrontabFile {
+                kind: Kind::User,
                 path: PathBuf::from("./example.cron"),
                 canonical_path,
                 contents: String::new(),
             },
         ];
 
-        let error = CrontabSources::find_duplicate_file(&files).unwrap();
+        let error = find_duplicate_files(&files).unwrap();
 
         let CrontabSourcesError::DuplicateFile { path, first_path } = &error else {
             panic!()
@@ -259,18 +356,20 @@ mod tests {
     fn distinct_files_are_not_duplicates() {
         let files = [
             CrontabFile {
+                kind: Kind::User,
                 path: PathBuf::from("first.cron"),
                 canonical_path: PathBuf::from("/tmp/first.cron"),
                 contents: String::new(),
             },
             CrontabFile {
+                kind: Kind::User,
                 path: PathBuf::from("second.cron"),
                 canonical_path: PathBuf::from("/tmp/second.cron"),
                 contents: String::new(),
             },
         ];
 
-        assert!(CrontabSources::find_duplicate_file(&files).is_none());
+        assert!(find_duplicate_files(&files).is_none());
     }
 
     #[test]
@@ -278,7 +377,7 @@ mod tests {
         let missing = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target/tmp/sources_tests/does-not-exist.cron");
 
-        let error = CrontabSources::try_read_files(std::slice::from_ref(&missing)).unwrap_err();
+        let error = try_read_files(&[InputFile::from_crontab(missing.clone())]).unwrap_err();
 
         let CrontabSourcesError::FileRead { path, source } = &error else {
             panic!()
@@ -294,7 +393,11 @@ mod tests {
         let first = PathBuf::from("first-missing.cron");
         let second = PathBuf::from("second-missing.cron");
 
-        let error = CrontabSources::try_read_files(&[first.clone(), second]).unwrap_err();
+        let error = try_read_files(&[
+            InputFile::from_crontab(first.clone()),
+            InputFile::from_crontab(second),
+        ])
+        .unwrap_err();
 
         let CrontabSourcesError::FileRead { path, .. } = error else {
             panic!()
@@ -310,7 +413,7 @@ mod tests {
         let invalid = temporary_directory.join("invalid-utf8.cron");
         std::fs::write(&invalid, [0xff]).unwrap();
 
-        let error = CrontabSources::try_read_files(std::slice::from_ref(&invalid)).unwrap_err();
+        let error = try_read_files(&[InputFile::from_crontab(invalid.clone())]).unwrap_err();
 
         let CrontabSourcesError::FileRead { path, source } = error else {
             panic!()
@@ -326,6 +429,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@daily"),
+            user: None,
             command: String::from(":"),
             description: None,
             section: Some(JobSection {
@@ -334,7 +438,7 @@ mod tests {
             }),
         })]);
 
-        let sources = CrontabSources::from_live_crontab(crontab);
+        let sources = CrontabSources::from(crontab);
         let job = sources.jobs()[0];
 
         assert_eq!(job.uid, 42);
@@ -345,7 +449,7 @@ mod tests {
     fn documents_preserve_source_order_and_jobs() {
         let first = Crontab::new(Parser::parse("@daily echo first"));
         let second = Crontab::new(Parser::parse("@daily echo second"));
-        let sources = CrontabSources::from_file_crontabs(vec![first, second]);
+        let sources = CrontabSources::from(vec![first, second]);
 
         let documents = sources.documents();
 
@@ -371,7 +475,7 @@ mod tests {
             .map(|job| job.fingerprint)
             .collect::<Vec<_>>();
 
-        let sources = CrontabSources::from_file_crontabs(vec![first, second]);
+        let sources = CrontabSources::from(vec![first, second]);
 
         assert_eq!(
             sources.jobs().iter().map(|job| job.uid).collect::<Vec<_>>(),
@@ -402,8 +506,8 @@ mod tests {
             ))
         };
 
-        let original = CrontabSources::from_file_crontabs(vec![make_first(), make_second()]);
-        let reordered = CrontabSources::from_file_crontabs(vec![make_second(), make_first()]);
+        let original = CrontabSources::from(vec![make_first(), make_second()]);
+        let reordered = CrontabSources::from(vec![make_second(), make_first()]);
         let original_job = original
             .jobs()
             .into_iter()
@@ -431,7 +535,7 @@ mod tests {
             b"second",
         ));
 
-        let sources = CrontabSources::from_file_crontabs(vec![first, second]);
+        let sources = CrontabSources::from(vec![first, second]);
         let first_section = sources.sources[0].jobs()[0].section.as_ref().unwrap();
         let second_section = sources.sources[1].jobs()[0].section.as_ref().unwrap();
         let ignored_section = sources.sources[1]
@@ -458,7 +562,7 @@ mod tests {
         let second_source = format!("## %{{{second_tag}}}\n@daily echo {second_tag}");
         let second = Crontab::new(Parser::parse_with_document_id(&second_source, b"second"));
         let second_fingerprint = second.jobs()[0].fingerprint;
-        let mut sources = CrontabSources::from_file_crontabs(vec![first, second]);
+        let mut sources = CrontabSources::from(vec![first, second]);
 
         for selection in [
             Job::Uid(2),
@@ -474,11 +578,9 @@ mod tests {
 
     #[test]
     fn crontab_sources_report_whether_any_document_has_jobs() {
-        let empty = CrontabSources::from_file_crontabs(Vec::new());
-        let jobless = CrontabSources::from_file_crontabs(vec![Crontab::new(Parser::parse(
-            "FOO=bar\n# Comment",
-        ))]);
-        let runnable = CrontabSources::from_file_crontabs(vec![
+        let empty = CrontabSources::from(Vec::new());
+        let jobless = CrontabSources::from(vec![Crontab::new(Parser::parse("FOO=bar\n# Comment"))]);
+        let runnable = CrontabSources::from(vec![
             Crontab::new(Vec::new()),
             Crontab::new(Parser::parse("@daily :")),
         ]);
@@ -500,7 +602,7 @@ mod tests {
         ));
         let first_fingerprint = first.jobs()[0].fingerprint;
         let second_fingerprint = second.jobs()[0].fingerprint;
-        let sources = CrontabSources::from_file_crontabs(vec![first, second]);
+        let sources = CrontabSources::from(vec![first, second]);
 
         let json = sources.to_json();
 
@@ -520,7 +622,7 @@ mod tests {
             "@daily test \"$VALUE\" = shared",
             b"second",
         ));
-        let mut sources = CrontabSources::from_file_crontabs(vec![first, second]);
+        let mut sources = CrontabSources::from(vec![first, second]);
         let env = HashMap::from([
             (String::from("HOME"), String::from("/tmp")),
             (String::from("VALUE"), String::from("shared")),

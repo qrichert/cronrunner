@@ -195,6 +195,7 @@ impl Crontab {
     /// #     fingerprint: 13_376_942,
     /// #     tag: None,
     /// #     schedule: String::new(),
+    /// #     user: None,
     /// #     command: String::new(),
     /// #     description: None,
     /// #     section: None,
@@ -268,6 +269,7 @@ impl Crontab {
     /// #     fingerprint: 13_376_942,
     /// #     tag: None,
     /// #     schedule: String::new(),
+    /// #     user: None,
     /// #     command: String::new(),
     /// #     description: None,
     /// #     section: None,
@@ -442,6 +444,14 @@ impl Crontab {
                 r#""schedule":"{}","#,
                 escape_json_string(&job.schedule)
             );
+            _ = write!(
+                json,
+                r#""user":{},"#,
+                job.user.as_ref().map_or_else(
+                    || Cow::Borrowed("null"),
+                    |user| { Cow::Owned(format!(r#""{}""#, escape_json_string(user))) }
+                )
+            );
             _ = write!(json, r#""command":"{}","#, escape_json_string(&job.command));
             _ = write!(
                 json,
@@ -540,6 +550,7 @@ mod tests {
     // allocate a per-test temp bin dir and thread it into process-local
     // env setup instead of mutating the global env.
 
+    #[allow(clippy::too_many_lines)]
     fn tokens() -> Vec<Token> {
         vec![
             Token::Comment(Comment {
@@ -555,6 +566,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@reboot"),
+                user: None,
                 command: String::from("/usr/bin/bash ~/startup.sh"),
                 description: None,
                 section: None,
@@ -578,6 +590,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("30 20 * * *"),
+                user: None,
                 command: String::from("/usr/local/bin/brew update && /usr/local/bin/brew upgrade"),
                 description: Some(JobDescription(String::from("Update brew."))),
                 section: None,
@@ -595,6 +608,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("* * * * *"),
+                user: None,
                 command: String::from("echo $FOO"),
                 description: Some(JobDescription(String::from("Print variable."))),
                 section: None,
@@ -608,6 +622,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@reboot"),
+                user: None,
                 command: String::from(":"),
                 description: None,
                 section: None,
@@ -621,6 +636,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'I am echoed by bash!'"),
                 description: None,
                 section: None,
@@ -634,6 +650,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@yerly"),
+                user: None,
                 command: String::from("./cleanup.sh"),
                 description: None,
                 section: None,
@@ -648,6 +665,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: String::from("echo 'hello, world'"),
             description: None,
             section: None,
@@ -705,6 +723,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@daily"),
+            user: None,
             command: String::from("docker image prune --force"),
             description: None,
             section: None,
@@ -716,6 +735,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@daily"),
+            user: None,
             command: String::from("docker image prune --force"),
             description: None,
             section: None,
@@ -726,6 +746,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@daily"),
+            user: None,
             command: String::from("docker image prune --force"),
             description: None,
             section: None,
@@ -736,6 +757,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("<invalid>"),
+            user: None,
             command: String::from("<invalid>"),
             description: None,
             section: None,
@@ -749,6 +771,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@reboot"),
+            user: None,
             command: String::from("echo 'hello, world'"),
             description: None,
             section: None,
@@ -763,6 +786,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@reboot"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -777,6 +801,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@daily"),
+            user: None,
             command: String::from("echo 'hello, world'"),
             description: None,
             section: None,
@@ -794,6 +819,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@reboot"),
+            user: None,
             command: String::from("echo 'hello, world'"),
             description: None,
             section: None,
@@ -808,6 +834,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@reboot"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -822,6 +849,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@daily"),
+            user: None,
             command: String::from("echo 'hello, world'"),
             description: None,
             section: None,
@@ -839,6 +867,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: Some(String::from("my-tag")),
             schedule: String::from("@reboot"),
+            user: None,
             command: String::from("echo 'hello, world'"),
             description: None,
             section: None,
@@ -853,6 +882,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: Some(String::from("my-tag")),
                 schedule: String::from("@reboot"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -868,6 +898,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@daily"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -877,6 +908,7 @@ mod tests {
                 fingerprint: 369_108,
                 tag: Some(String::from("MY-TAG")),
                 schedule: String::from("@daily"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -896,6 +928,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@daily"),
+                user: None,
                 command: String::from("df -h > ~/track_disk_usage.txt"),
                 description: Some(JobDescription(String::from("Track disk usage."))),
                 section: None,
@@ -909,6 +942,7 @@ mod tests {
                 fingerprint: 108_216_215,
                 tag: None,
                 schedule: String::from("@daily"),
+                user: None,
                 command: String::from("df -h > ~/track_disk_usage.txt"),
                 description: Some(JobDescription(String::from("Track disk usage."))),
                 section: None,
@@ -973,6 +1007,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@reboot"),
+            user: None,
             command: String::from("/usr/bin/bash ~/startup.sh"),
             description: Some(JobDescription(String::from("Description."))),
             section: None,
@@ -996,6 +1031,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("* * * * *"),
+                user: None,
                 command: String::from("echo $FOO"),
                 description: Some(JobDescription(String::from("Print variable."))),
                 section: None,
@@ -1028,6 +1064,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("* * * * *"),
+                user: None,
                 command: String::from("echo $FOO"),
                 description: Some(JobDescription(String::from("Print variable."))),
                 section: None,
@@ -1041,6 +1078,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@reboot"),
+                user: None,
                 command: String::from(":"),
                 description: None,
                 section: None,
@@ -1073,6 +1111,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("30 9 * * * "),
+                user: None,
                 command: String::from("echo 'gm'"),
                 description: None,
                 section: None,
@@ -1096,6 +1135,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@reboot"),
+            user: None,
             command: String::from("cat a-file.txt"),
             description: None,
             section: None,
@@ -1120,6 +1160,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'I am echoed by bash!'"),
                 description: None,
                 section: None,
@@ -1146,6 +1187,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'I am echoed by a custom shell!'"),
                 description: None,
                 section: None,
@@ -1171,6 +1213,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'I am echoed by bash!'"),
                 description: None,
                 section: None,
@@ -1184,6 +1227,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'I am echoed by zsh!'"),
                 description: None,
                 section: None,
@@ -1208,6 +1252,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@daily"),
+            user: None,
             command: String::from("/usr/bin/bash ~/startup.sh"),
             description: None,
             section: None,
@@ -1235,6 +1280,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@yearly"),
+                user: None,
                 command: String::from("./cleanup.sh"),
                 description: None,
                 section: None,
@@ -1261,6 +1307,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'I am echoed in a different Home!'"),
                 description: None,
                 section: None,
@@ -1314,6 +1361,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'I run is user1's Home!'"),
                 description: None,
                 section: None,
@@ -1327,6 +1375,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'I run is user2's Home!'"),
                 description: None,
                 section: None,
@@ -1347,6 +1396,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: String::from("echo 'I am echoed by bash!'"),
             description: None,
             section: None,
@@ -1356,6 +1406,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@never"),
+            user: None,
             command: String::from("sleep infinity"),
             description: None,
             section: None,
@@ -1378,6 +1429,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: Some(String::from("taggy \"tag\"")),
                 schedule: String::from("@daily"),
+                user: None,
                 command: String::from("/usr/bin/bash ~/startup.sh"),
                 description: None,
                 section: None,
@@ -1391,6 +1443,7 @@ mod tests {
                 fingerprint: 17_118_619_922_108_271_534,
                 tag: None,
                 schedule: String::from("* * * * *"),
+                user: None,
                 command: String::from("echo \"$FOO\""),
                 description: Some(JobDescription(String::from("Print \"variable\"."))),
                 section: Some(tokens::JobSection {
@@ -1405,7 +1458,28 @@ mod tests {
         println!("{json}");
         assert_eq!(
             json,
-            r#"[{"uid":1,"fingerprint":"cc1dae","tag":"taggy \"tag\"","schedule":"@daily","command":"/usr/bin/bash ~/startup.sh","description":null,"section":null},{"uid":2,"fingerprint":"ed918e1eee304bae","tag":null,"schedule":"* * * * *","command":"echo \"$FOO\"","description":"Print \"variable\".","section":{"uid":1,"title":"Some \"testing\" going on here..."}}]"#
+            r#"[{"uid":1,"fingerprint":"cc1dae","tag":"taggy \"tag\"","schedule":"@daily","user":null,"command":"/usr/bin/bash ~/startup.sh","description":null,"section":null},{"uid":2,"fingerprint":"ed918e1eee304bae","tag":null,"schedule":"* * * * *","user":null,"command":"echo \"$FOO\"","description":"Print \"variable\".","section":{"uid":1,"title":"Some \"testing\" going on here..."}}]"#
+        );
+    }
+
+    #[test]
+    fn to_json_includes_system_user() {
+        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
+            uid: 1,
+            fingerprint: 0x_00cc_1dae,
+            tag: None,
+            schedule: String::from("@daily"),
+            user: Some(String::from("root")),
+            command: String::from("echo hi"),
+            description: None,
+            section: None,
+        })]);
+
+        let json = crontab.to_json();
+
+        assert_eq!(
+            json,
+            r#"[{"uid":1,"fingerprint":"cc1dae","tag":null,"schedule":"@daily","user":"root","command":"echo hi","description":null,"section":null}]"#
         );
     }
 
@@ -1421,6 +1495,7 @@ mod tests {
             fingerprint: 0xdead,
             tag: Some(String::from("a\nb")),
             schedule: String::from("*/5\t* * * *"),
+            user: None,
             command: String::from("echo \"a\\nb\""),
             description: Some(JobDescription(String::from("c\rd"))),
             section: Some(tokens::JobSection {
@@ -1437,7 +1512,7 @@ mod tests {
         println!("{json}");
         assert_eq!(
             json,
-            r#"[{"uid":1,"fingerprint":"dead","tag":"a\nb","schedule":"*/5\t* * * *","command":"echo \"a\\nb\"","description":"c\rd","section":{"uid":7,"title":"e\u0001f"}}]"#
+            r#"[{"uid":1,"fingerprint":"dead","tag":"a\nb","schedule":"*/5\t* * * *","user":null,"command":"echo \"a\\nb\"","description":"c\rd","section":{"uid":7,"title":"e\u0001f"}}]"#
         );
     }
 }

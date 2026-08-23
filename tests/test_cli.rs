@@ -120,6 +120,42 @@ fn lists_jobs_from_multiple_files_without_invoking_crontab() {
 }
 
 #[test]
+fn system_file_lists_jobs_with_their_user() {
+    let file = fixture("crontab_system.cron");
+
+    let output = crn()
+        .env("PATH", "")
+        .args(["--system-file", file.to_str().unwrap(), "--list-only"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let stdout = stdout(&output);
+    // `root` keeps `*` in `NO_COLOR` mode.
+    assert!(stdout.contains("root* echo 'system job ran'"), "{stdout}");
+    assert!(stdout.contains("www-data echo 'other user'"), "{stdout}");
+}
+
+#[test]
+fn system_file_job_runs_as_the_current_user_ignoring_its_user_field() {
+    let file = fixture("crontab_system.cron");
+
+    // The job declares `root`, but cronrunner does not escalate.
+    let output = crn()
+        .env("HOME", "/tmp")
+        .args(["--system-file", file.to_str().unwrap(), "1"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        stdout(&output).contains("system job ran"),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
 fn empty_file_does_not_fall_back_to_crontab() {
     let empty = temporary_directory("empty_file").join("empty.cron");
     fs::write(&empty, "").unwrap();

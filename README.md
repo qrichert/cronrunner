@@ -39,16 +39,17 @@ Run cron jobs manually.
 Usage: crn [OPTIONS] [ID]
 
 Options:
-  -l, --list-only      List available jobs and exit.
-      --as-json        Render `--list-only` as JSON.
-      --fingerprint    Use job fingerprints.
-  -t, --tag <TAG>      Run specific tag.
-  -d, --detach         Run job in the background.
-  -e, --env <FILE>     Override job environment.
-  -f, --file <FILE>    Read jobs from a file (repeatable).
+  -l, --list-only           List available jobs and exit.
+      --as-json             Render `--list-only` as JSON.
+      --fingerprint         Use job fingerprints.
+  -t, --tag <TAG>           Run specific tag.
+  -d, --detach              Run job in the background.
+  -e, --env <FILE>          Override job environment.
+  -f, --file <FILE>         Read jobs from a file (repeatable).
+  -F, --system-file <FILE>  Read jobs from a system file (repeatable).
 
-  -h, --help           Show this message and exit.
-  -V, --version        Show the version and exit.
+  -h, --help                Show this message and exit.
+  -V, --version             Show the version and exit.
 ```
 
 ### Examples
@@ -176,6 +177,18 @@ $ crn -f personal.cron -f project.cron
 If you pass multiple file sources, they are read and run in isolation.
 Variables from one crontab don't leak into the other, and job
 fingerprints remain stable even if you reorder the sources.
+
+To read a system crontab file, use `--system-file`.
+
+### System crontabs
+
+System crontabs typically live in `/etc/cron.d/*` and have an additional
+`user` field in-between the schedule and the command.
+
+cronrunner will display that user in the jobs list, but it will not use
+it to run jobs. If you want to run jobs as a different user, do it
+yourself (e.g., `su - <user> -c "crn"`). cronrunner doesn't handle
+privilege escalations.
 
 ### Configuration
 

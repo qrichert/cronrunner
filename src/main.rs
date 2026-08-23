@@ -46,13 +46,13 @@ fn main() -> ExitStatus {
     };
 
     let mut sources = if !config.crontab_files.is_empty() {
-        match CrontabSources::from_files(&config.crontab_files) {
+        match CrontabSources::try_from(config.crontab_files.as_slice()) {
             Ok(sources) => sources,
             Err(error) => return exit_from_crontab_sources_error(&error),
         }
     } else {
         match crontab::make_instance() {
-            Ok(crontab) => CrontabSources::from_live_crontab(crontab),
+            Ok(crontab) => CrontabSources::from(crontab),
             Err(error) => return exit_from_crontab_read_error(&error),
         }
     };
@@ -257,9 +257,10 @@ fn format_jobs_as_menu_entries(documents: &[Crontab], use_fingerprint: bool) -> 
             };
             let description = format_job_description(job.description.as_ref());
             let schedule = format_job_schedule(&job.schedule);
+            let user = format_job_user(job.user.as_deref());
             let command = format_job_command(&job.command, !description.is_empty());
 
-            menu.push(format!("{number} {description}{schedule} {command}"));
+            menu.push(format!("{number} {description}{schedule}{user}{command}"));
         }
 
         if let Some(next_document) = documents.peek() {
@@ -312,9 +313,10 @@ fn format_job_section(section: &JobSection) -> String {
 }
 
 fn format_job_fingerprint(fingerprint: u64) -> String {
-    // Fixed 16-wide (full u64) so every fingerprint is the same length and stays
-    // stable regardless of what else is loaded. Leading zeros don't affect
-    // selection: input is parsed as hex, so `0094…` and `94…` are the same job.
+    // Fixed 16-wide (full `u64`) so every fingerprint is the same
+    // length and stays stable regardless of what else is loaded.
+    // Leading zeros don't affect selection: input is parsed as hex,
+    // so `0094...` and `94...` are the same job.
     ui::Color::highlight(&format!("{fingerprint:016x}")).into_owned()
 }
 
@@ -332,6 +334,18 @@ fn format_job_description(description: Option<&JobDescription>) -> String {
 
 fn format_job_schedule(schedule: &str) -> String {
     ui::Color::attenuate(schedule).into_owned()
+}
+
+fn format_job_user(user: Option<&str>) -> String {
+    if let Some(user) = user {
+        format!(
+            " {user}{is_root} ",
+            user = ui::Color::accentuate(user),
+            is_root = if user == "root" { "*" } else { "" }
+        )
+    } else {
+        String::from(" ")
+    }
 }
 
 fn format_job_command(command: &str, has_description: bool) -> String {
@@ -436,6 +450,7 @@ mod tests {
             fingerprint: uid as u64,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: format!("echo {uid}"),
             description: None,
             section,
@@ -595,6 +610,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -604,6 +620,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@monthly"),
+                user: None,
                 command: String::from("echo 'buongiorno'"),
                 description: Some(JobDescription(String::from("This job has a description"))),
                 section: None,
@@ -634,6 +651,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -643,6 +661,7 @@ mod tests {
                 fingerprint: 1_234_567,
                 tag: None,
                 schedule: String::from("@monthly"),
+                user: None,
                 command: String::from("echo 'buongiorno'"),
                 description: Some(JobDescription(String::from("This job has a description"))),
                 section: None,
@@ -673,6 +692,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'foo'"),
                 description: None,
                 section: None,
@@ -682,6 +702,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@monthly"),
+                user: None,
                 command: String::from("echo 'bar'"),
                 description: None,
                 section: Some(JobSection {
@@ -694,6 +715,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@monthly"),
+                user: None,
                 command: String::from("echo 'baz'"),
                 description: None,
                 section: Some(JobSection {
@@ -831,6 +853,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -840,6 +863,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -849,6 +873,7 @@ mod tests {
                 fingerprint: 13_376_942,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -871,6 +896,7 @@ mod tests {
                 fingerprint: 1,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -880,6 +906,7 @@ mod tests {
                 fingerprint: 1337,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -889,6 +916,7 @@ mod tests {
                 fingerprint: 12,
                 tag: None,
                 schedule: String::from("@hourly"),
+                user: None,
                 command: String::from("echo 'hello, world'"),
                 description: None,
                 section: None,
@@ -920,6 +948,7 @@ mod tests {
             fingerprint: 0x94_b1_9a_b6_8c_84_11,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: String::from("echo 'short'"),
             description: None,
             section: None,
@@ -929,6 +958,7 @@ mod tests {
             fingerprint: u64::MAX,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: String::from("echo 'wide'"),
             description: None,
             section: None,
@@ -952,6 +982,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: String::from("echo '¡hola!'"),
             description: None,
             section: None,
@@ -975,6 +1006,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: String::from("echo '¡hola!'"),
             description: None,
             section: None,
@@ -1156,6 +1188,52 @@ mod tests {
         assert_eq!(
             exit_from_crontab_sources_error(&error),
             ExitStatus::ArgsError
+        );
+    }
+
+    #[test]
+    fn format_job_user_none_is_a_single_space() {
+        assert_eq!(format_job_user(None), " ");
+    }
+
+    #[test]
+    fn format_job_user_is_accentuated() {
+        assert_eq!(
+            format_job_user(Some("www-data")),
+            " \u{1b}[0;94mwww-data\u{1b}[0m "
+        );
+    }
+
+    #[test]
+    fn format_job_user_root_is_starred() {
+        // `root` is the escalation-danger case (we run it as the
+        // current user, not root), so it gets an extra marker.
+        assert_eq!(
+            format_job_user(Some("root")),
+            " \u{1b}[0;94mroot\u{1b}[0m* "
+        );
+    }
+
+    #[test]
+    fn format_menu_entry_renders_system_user() {
+        let job = CronJob {
+            uid: 1,
+            fingerprint: 13_376_942,
+            tag: None,
+            schedule: String::from("@daily"),
+            user: Some(String::from("root")),
+            command: String::from("echo 'hi'"),
+            description: None,
+            section: None,
+        };
+
+        let entries = format_single_document_jobs_as_menu_entries(&[&job], false);
+
+        assert_eq!(
+            entries,
+            vec![String::from(
+                "\u{1b}[0;92m1.\u{1b}[0m \u{1b}[0;90m@daily\u{1b}[0m \u{1b}[0;94mroot\u{1b}[0m* echo 'hi'"
+            )]
         );
     }
 }

@@ -5,6 +5,25 @@ use super::tokens::{
     Comment, CommentKind, CronJob, IgnoredJob, JobDescription, JobSection, Token, Unknown, Variable,
 };
 
+/// Whether it's a normal crontab or a system crontab.
+///
+/// System crontabs work like regular crontabs, but contain an extra
+/// `user` field after the schedule. Typically, they live in
+/// `/etc/cron.d/*`.
+///
+/// # Examples
+///
+/// ```console
+/// $ cat /etc/cron.d/e2scrub_all
+/// 30 3 * * 0 root test -e /run/systemd/system || SERVICE_MODE=1 /usr/libexec/e2fsprogs/e2scrub_all_cron
+/// 10 3 * * * root test -e /run/systemd/system || SERVICE_MODE=1 /sbin/e2scrub_all -A -r/
+/// ```
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Kind {
+    User,
+    System,
+}
+
 /// Internal state for the [`Parser`].
 ///
 /// This struct enables us to keep the simplified `Parser::parse()`
@@ -19,6 +38,7 @@ struct ParserState {
     next_job_uid: usize,
     job_section: Option<JobSection>,
     document_hash: Option<u64>,
+    kind: Kind,
 }
 
 /// Parse crontab into usable tokens.
@@ -52,6 +72,7 @@ impl Parser {
     ///         fingerprint: 6_917_582_312_284_972_245,
     ///         tag: None,
     ///         schedule: String::from("@hourly"),
+    ///         user: None,
     ///         command: String::from("echo ':)'"),
     ///         description: None,
     ///         section: None,
@@ -66,15 +87,30 @@ impl Parser {
     /// if a line is not something [`Parser`] understands.
     #[must_use]
     pub fn parse(crontab: &str) -> Vec<Token> {
-        Self::parse_inner(crontab, None)
+        Self::parse_inner(crontab, Kind::User, None)
+    }
+
+    /// Parse system crontab into usable tokens.
+    ///
+    /// See [`Parser::parse()`] for details.
+    ///
+    /// Note that right now this has no use case in this project.
+    /// The only possible source for a system crontab is a document.
+    /// Moreover, `/etc/cron.d/*` is treated as an aggregate of
+    /// documents; there is no single "system crontab" like there is
+    /// for a user crontab. We keep it for public API consistency and
+    /// the least surprise principle.
+    #[must_use]
+    pub fn parse_system(crontab: &str) -> Vec<Token> {
+        Self::parse_inner(crontab, Kind::System, None)
     }
 
     /// Parse a crontab document into usable tokens.
     ///
     /// The difference with [`Parser::parse()`] is that the caller must
-    /// provide a unique and stable `document_identifier`, which is then
-    /// used to derive job fingerprints (typically, use the canonical
-    /// file path of the document).
+    /// provide a unique and stable `document_id`, which is then used to
+    /// derive job fingerprints (typically, use the canonical file path
+    /// of the document).
     ///
     /// Without `document_id`, two identical jobs from two different
     /// documents would produce the same hash, making the selection
@@ -88,17 +124,27 @@ impl Parser {
     /// is returned (empty crontab) or [`Unknown`] tokens are produced
     /// if a line is not something [`Parser`] understands.
     #[must_use]
-    pub fn parse_with_document_id(crontab: &str, document_identifier: &[u8]) -> Vec<Token> {
-        let document_hash = hash::djb2(document_identifier);
-        Self::parse_inner(crontab, Some(document_hash))
+    pub fn parse_with_document_id(crontab: &str, document_id: &[u8]) -> Vec<Token> {
+        let document_hash = hash::djb2(document_id);
+        Self::parse_inner(crontab, Kind::User, Some(document_hash))
     }
 
-    fn parse_inner(crontab: &str, document_hash: Option<u64>) -> Vec<Token> {
+    /// Parse a system crontab document into usable tokens.
+    ///
+    /// See [`Parser::parse_with_document_id()`] for details.
+    #[must_use]
+    pub fn parse_system_with_document_id(crontab: &str, document_id: &[u8]) -> Vec<Token> {
+        let document_hash = hash::djb2(document_id);
+        Self::parse_inner(crontab, Kind::System, Some(document_hash))
+    }
+
+    fn parse_inner(crontab: &str, kind: Kind, document_hash: Option<u64>) -> Vec<Token> {
         let mut state = ParserState {
             tokens: Vec::new(),
             next_job_uid: 1,
             job_section: None,
             document_hash,
+            kind,
         };
 
         for mut line in crontab.lines() {
@@ -150,6 +196,11 @@ impl Parser {
             return Err(());
         }
 
+        let (user, command) = match state.kind {
+            Kind::User => (None, command), // No-op for `command`.
+            Kind::System => Self::extract_user_from_command(command),
+        };
+
         let previous_token = state.tokens.last();
         let mut description = Self::get_job_description_if_any(previous_token);
         let tag = Self::extract_tag_from_job_description(&mut description);
@@ -159,6 +210,7 @@ impl Parser {
             return Ok(Token::IgnoredJob(IgnoredJob {
                 tag,
                 schedule,
+                user,
                 command,
                 description,
                 section,
@@ -173,6 +225,7 @@ impl Parser {
             fingerprint,
             tag,
             schedule,
+            user,
             command,
             description,
             section,
@@ -256,6 +309,39 @@ impl Parser {
 
             previous_char = char;
         }
+    }
+
+    /// Extract the user from a system crontab command line.
+    ///
+    /// System crontabs have an extra `user` field in-between the
+    /// schedule and the command.
+    ///
+    /// Here, the schedule is already gone, which leaves us with
+    /// `<user> <command>`.
+    ///
+    /// This is a simple split on the first occurrence of whitespace.
+    /// To lean on the safe side, if after the split the command is
+    /// empty, we treat it as if it were a regular crontab and noop,
+    /// rather than ship `user` with an empty `command` (i.e., if there
+    /// is a problem, we assume wrong kind rather than empty command).
+    fn extract_user_from_command(command: String) -> (Option<String>, String) {
+        let original = command;
+
+        let Some((user, command)) = original.split_once(|c: char| c.is_ascii_whitespace()) else {
+            // No whitespace.
+            // Safe, assume wrong kind and noop.
+            return (None, original);
+        };
+
+        let (user, command) = (user.trim(), command.trim());
+
+        if command.is_empty() {
+            // User, but no command.
+            // Safe, assume wrong kind and noop.
+            return (None, original);
+        }
+
+        (Some(user.to_string()), command.to_string())
     }
 
     /// Extract description comment from a token (if any).
@@ -509,6 +595,7 @@ mod tests {
                     fingerprint: 17_695_356_924_205_779_724,
                     tag: None,
                     schedule: String::from("@reboot"),
+                    user: None,
                     command: String::from("/usr/bin/bash ~/startup.sh"),
                     description: None,
                     section: None,
@@ -532,6 +619,7 @@ mod tests {
                     fingerprint: 8_740_762_385_512_907_025,
                     tag: None,
                     schedule: String::from("30 20 * * *"),
+                    user: None,
                     command: String::from(
                         "/usr/local/bin/brew update && /usr/local/bin/brew upgrade"
                     ),
@@ -555,6 +643,7 @@ mod tests {
                     fingerprint: 17_118_619_922_108_271_534,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("echo $FOO"),
                     description: Some(JobDescription(String::from("Print variable."))),
                     section: Some(JobSection {
@@ -571,6 +660,7 @@ mod tests {
                     fingerprint: 15_438_538_048_322_941_730,
                     tag: None,
                     schedule: String::from("@reboot"),
+                    user: None,
                     command: String::from(":"),
                     description: None,
                     section: Some(JobSection {
@@ -598,6 +688,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: None,
@@ -607,6 +698,7 @@ mod tests {
                     fingerprint: 4_461_213_176_276_726_319,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: None,
@@ -616,6 +708,7 @@ mod tests {
                     fingerprint: 6_015_366_411_386_091_056,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: None,
@@ -672,7 +765,7 @@ mod tests {
     }
 
     #[test]
-    fn document_fingerprint_is_stable_for_the_same_identifier() {
+    fn document_fingerprint_is_stable_for_the_same_id() {
         let first = Parser::parse_with_document_id("@hourly echo hello", b"document");
         let second = Parser::parse_with_document_id("@hourly echo hello", b"document");
         let Token::CronJob(first_job) = &first[0] else {
@@ -686,7 +779,7 @@ mod tests {
     }
 
     #[test]
-    fn document_fingerprint_changes_with_the_identifier() {
+    fn document_fingerprint_changes_with_the_id() {
         let first = Parser::parse_with_document_id("@hourly echo hello", b"first");
         let second = Parser::parse_with_document_id("@hourly echo hello", b"second");
         let Token::CronJob(first_job) = &first[0] else {
@@ -856,6 +949,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: Some(String::from("tag")),
                     schedule: String::from("@daily"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: Some(JobDescription(String::from("Job description"))),
                     section: None,
@@ -885,6 +979,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: Some(String::from("tag")),
                     schedule: String::from("@daily"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: Some(JobDescription(String::from("Job description"))),
                     section: None,
@@ -914,6 +1009,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: Some(String::from("[{é&ù°àé \\3")),
                     schedule: String::from("@daily"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     // It's only up until the first `}`.
                     description: Some(JobDescription(String::from("]}Job description"))),
@@ -944,6 +1040,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: Some(String::from("tag")),
                     schedule: String::from("@daily"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     // It's only up until the first `}`.
                     description: None,
@@ -972,6 +1069,7 @@ mod tests {
                 Token::IgnoredJob(IgnoredJob {
                     tag: Some(String::from("ignore")),
                     schedule: String::from("@daily"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     // It's only up until the first `}`.
                     description: None,
@@ -1173,6 +1271,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: Some(JobDescription(String::from("Job description"))),
                     section: None,
@@ -1197,6 +1296,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: None,
@@ -1216,6 +1316,7 @@ mod tests {
                 fingerprint: 2_907_059_941_167_361_582,
                 tag: None,
                 schedule: String::from("* * * * *"),
+                user: None,
                 command: String::from("printf 'hello, world'"),
                 description: None,
                 section: None,
@@ -1277,6 +1378,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1289,6 +1391,7 @@ mod tests {
                     fingerprint: 4_461_213_176_276_726_319,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1316,6 +1419,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: None,
@@ -1345,6 +1449,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: None,
@@ -1362,6 +1467,7 @@ mod tests {
                     fingerprint: 4_461_213_176_276_726_319,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1378,6 +1484,7 @@ mod tests {
                     fingerprint: 6_015_366_411_386_091_056,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1409,6 +1516,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: None,
@@ -1422,6 +1530,7 @@ mod tests {
                     fingerprint: 4_461_213_176_276_726_319,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1438,6 +1547,7 @@ mod tests {
                     fingerprint: 6_015_366_411_386_091_056,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1489,6 +1599,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1505,6 +1616,7 @@ mod tests {
                     fingerprint: 4_461_213_176_276_726_319,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1521,6 +1633,7 @@ mod tests {
                     fingerprint: 6_015_366_411_386_091_056,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1552,6 +1665,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: None,
@@ -1565,6 +1679,7 @@ mod tests {
                     fingerprint: 4_461_213_176_276_726_319,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1581,6 +1696,7 @@ mod tests {
                     fingerprint: 6_015_366_411_386_091_056,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1620,6 +1736,7 @@ mod tests {
                     fingerprint: 2_907_059_941_167_361_582,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: Some(JobDescription(String::from("Job description"))),
                     section: Some(JobSection {
@@ -1632,6 +1749,7 @@ mod tests {
                     fingerprint: 4_461_213_176_276_726_319,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'hello, world'"),
                     description: None,
                     section: Some(JobSection {
@@ -1664,6 +1782,7 @@ mod tests {
                     fingerprint: 1_621_249_689_450_973_832,
                     tag: None,
                     schedule: String::from("* * * * *"),
+                    user: None,
                     command: String::from("printf 'buongiorno'"),
                     description: None,
                     section: Some(JobSection {
@@ -1872,6 +1991,133 @@ mod tests {
                 identifier: String::from("FOO"),
                 value: String::from("bar # baz")
             })],
+        );
+    }
+
+    #[test]
+    fn system_crontab_extracts_user_field() {
+        let tokens = Parser::parse_system("* * * * * root echo 'hi'");
+
+        assert_eq!(
+            tokens,
+            vec![Token::CronJob(CronJob {
+                uid: 1,
+                fingerprint: 6_917_582_312_286_695_043,
+                tag: None,
+                schedule: String::from("* * * * *"),
+                user: Some(String::from("root")),
+                command: String::from("echo 'hi'"),
+                description: None,
+                section: None,
+            })]
+        );
+    }
+
+    #[test]
+    fn system_crontab_extracts_user_field_from_shortcut() {
+        let Token::CronJob(job) = &Parser::parse_system("@daily www-data echo 'hi'")[0] else {
+            panic!("token should be a job")
+        };
+
+        assert_eq!(job.user, Some(String::from("www-data")));
+        assert_eq!(job.command, "echo 'hi'");
+    }
+
+    #[test]
+    fn system_crontab_splits_user_and_command_on_tab() {
+        // Crontab fields may be tab-separated, so the user/command
+        // split must treat a tab like a space.
+        let Token::CronJob(job) = &Parser::parse_system("* * * * * root\techo 'hi'")[0] else {
+            panic!("token should be a job")
+        };
+
+        assert_eq!(job.user, Some(String::from("root")));
+        assert_eq!(job.command, "echo 'hi'");
+    }
+
+    #[test]
+    fn system_crontab_user_without_command_falls_back_to_command() {
+        // If we can't extract a user _and_ a command, we assume that
+        // what we've got is the command, and not the user (i.e., we
+        // ship a command without a user, rather than a user without
+        // a command).
+        let Token::CronJob(job) = &Parser::parse_system("* * * * * root")[0] else {
+            panic!("token should be a job")
+        };
+
+        assert_eq!(job.user, None);
+        assert_eq!(job.command, "root");
+    }
+
+    #[test]
+    fn regular_crontab_does_not_extract_user() {
+        let Token::CronJob(job) = &Parser::parse("* * * * * root echo 'hi'")[0] else {
+            panic!("token should be a job")
+        };
+
+        assert_eq!(job.user, None);
+        assert_eq!(job.command, "root echo 'hi'");
+    }
+
+    #[test]
+    fn system_crontab_user_is_excluded_from_fingerprint() {
+        // Fingerprints hash document + uid + command, never the user.
+        // Same command in system and regular mode => same fingerprint.
+        let Token::CronJob(system) =
+            &Parser::parse_system_with_document_id("* * * * * root echo 'hi'", b"doc")[0]
+        else {
+            panic!()
+        };
+        let Token::CronJob(regular) =
+            &Parser::parse_with_document_id("* * * * * echo 'hi'", b"doc")[0]
+        else {
+            panic!()
+        };
+
+        assert_eq!(system.command, regular.command);
+        assert_eq!(system.fingerprint, regular.fingerprint);
+    }
+
+    #[test]
+    fn system_crontab_ignored_job_carries_user() {
+        let tokens = Parser::parse_system("## %{ignore}\n* * * * * root echo 'hi'");
+
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Comment(Comment {
+                    value: String::from("%{ignore}"),
+                    kind: CommentKind::Description,
+                }),
+                Token::IgnoredJob(IgnoredJob {
+                    tag: Some(String::from("ignore")),
+                    schedule: String::from("* * * * *"),
+                    user: Some(String::from("root")),
+                    command: String::from("echo 'hi'"),
+                    description: None,
+                    section: None,
+                })
+            ]
+        );
+    }
+
+    #[test]
+    fn extract_user_from_command_handles_edge_cases() {
+        // Normal: user then command.
+        assert_eq!(
+            Parser::extract_user_from_command(String::from("root echo 'hi'")),
+            (Some(String::from("root")), String::from("echo 'hi'"))
+        );
+        // No whitespace: can't split, assume wrong kind and noop.
+        assert_eq!(
+            Parser::extract_user_from_command(String::from("root")),
+            (None, String::from("root"))
+        );
+        // User then only whitespace: empty command, assume wrong kind
+        // and noop (keeps the original untouched).
+        assert_eq!(
+            Parser::extract_user_from_command(String::from("root ")),
+            (None, String::from("root "))
         );
     }
 }

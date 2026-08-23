@@ -16,6 +16,7 @@ pub static NO_COLOR: LazyLock<bool> = LazyLock::new(|| {
 
 pub const ERROR: &str = "\x1b[0;91m";
 pub const HIGHLIGHT: &str = "\x1b[0;92m";
+pub const ACCENTUATE: &str = "\x1b[0;94m";
 pub const ATTENUATE: &str = "\x1b[0;90m";
 pub const TITLE: &str = "\x1b[1;4m";
 pub const RESET: &str = "\x1b[0m";
@@ -31,6 +32,11 @@ impl Color {
     #[must_use]
     pub fn highlight(string: &str) -> Cow<'_, str> {
         Self::color(HIGHLIGHT, string)
+    }
+
+    #[must_use]
+    pub fn accentuate(string: &str) -> Cow<'_, str> {
+        Self::color(ACCENTUATE, string)
     }
 
     #[must_use]
@@ -113,6 +119,14 @@ mod tests {
         assert_eq!(
             Color::highlight("this is highlighted"),
             "\x1b[0;92mthis is highlighted\x1b[0m"
+        );
+    }
+
+    #[test]
+    fn color_accentuate_is_blue() {
+        assert_eq!(
+            Color::accentuate("this is accentuated"),
+            "\x1b[0;94mthis is accentuated\x1b[0m"
         );
     }
 

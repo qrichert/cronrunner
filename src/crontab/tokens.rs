@@ -27,6 +27,12 @@ pub struct CronJob {
     /// The schedule of the job, as defined in the crontab. This value
     /// isn't used by [`Crontab`](super::Crontab).
     pub schedule: String,
+    /// The user the command _should_ run as. This is specific to system
+    /// crontabs and will be `None` for regular crontabs. Its value is
+    /// displayed but ignored by cronrunner. If users want to run jobs
+    /// as someone else they should do `su - <user> -c "crn"`. We don't
+    /// handle escalations.
+    pub user: Option<String>,
     /// The command of the job, as defined in the crontab. This is what
     /// gets run in [`Crontab::run()`](super::Crontab::run).
     pub command: String,
@@ -56,6 +62,7 @@ impl fmt::Display for CronJob {
 pub struct IgnoredJob {
     pub tag: Option<String>,
     pub schedule: String,
+    pub user: Option<String>,
     pub command: String,
     pub description: Option<JobDescription>,
     pub section: Option<JobSection>,
@@ -131,6 +138,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: String::from("sleep 3599"),
             description: Some(JobDescription(String::from("Sleep (almost) forever."))),
             section: None,
@@ -148,6 +156,7 @@ mod tests {
             fingerprint: 13_376_942,
             tag: None,
             schedule: String::from("@hourly"),
+            user: None,
             command: String::from("sleep 3599"),
             description: None,
             section: None,

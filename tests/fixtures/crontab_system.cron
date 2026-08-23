@@ -1,0 +1,2 @@
+* * * * * root echo 'system job ran'
+@daily www-data echo 'other user'
