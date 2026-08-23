@@ -199,7 +199,6 @@ impl CrontabSources {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::error::Error as _;
 
     use cronrunner::parser::Parser;
     use cronrunner::tokens::{CronJob, JobSection};
