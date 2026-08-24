@@ -180,6 +180,9 @@ If you pass multiple file sources, they are read and run in isolation.
 Variables from one crontab don't leak into the other, and job
 fingerprints remain stable even if you reorder the sources.
 
+Source options are processed from left to right, and job IDs follow that
+order.
+
 To read a system crontab file, use `--system-file`. To include all system
 crontabs from `/etc/cron.d`, use `--system`.
 

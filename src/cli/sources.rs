@@ -2,10 +2,11 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use cronrunner::crontab::Crontab;
+use cronrunner::crontab::{self, Crontab};
 use cronrunner::parser::{Kind, Parser};
+use cronrunner::reader::ReadError;
 use cronrunner::tokens::{CronJob, Token};
 
 use super::job::Job;
@@ -43,6 +44,13 @@ impl InputFile {
             path,
         }
     }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum InputSource {
+    User,
+    SystemDirectory,
+    File(InputFile),
 }
 
 impl InputFile {
@@ -115,6 +123,7 @@ impl TryFrom<&InputFile> for CrontabFile {
 // TODO: We should align those with `crontab::ReadError`.
 #[derive(Debug)]
 pub enum CrontabSourcesError {
+    UserRead(ReadError),
     DirectoryRead { path: PathBuf, source: io::Error },
     FileRead { path: PathBuf, source: io::Error },
     DuplicateFile { path: PathBuf, first_path: PathBuf },
@@ -123,6 +132,7 @@ pub enum CrontabSourcesError {
 impl fmt::Display for CrontabSourcesError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UserRead(source) => write!(f, "{source}"),
             Self::DirectoryRead { path, source } => write!(
                 f,
                 "Cannot read system crontab directory '{}': {source}",
@@ -144,6 +154,7 @@ impl fmt::Display for CrontabSourcesError {
 impl Error for CrontabSourcesError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            Self::UserRead(source) => Some(source),
             Self::DirectoryRead { source, .. } => Some(source),
             Self::FileRead { source, .. } => Some(source),
             Self::DuplicateFile { .. } => None,
@@ -166,13 +177,6 @@ pub struct CrontabSources {
 }
 
 impl CrontabSources {
-    pub fn prepend(&mut self, source: Crontab) {
-        let mut sources = Vec::with_capacity(self.sources.len() + 1);
-        sources.push(source);
-        sources.append(&mut self.sources);
-        *self = sources.into();
-    }
-
     pub fn has_runnable_jobs(&self) -> bool {
         self.sources.iter().any(Crontab::has_runnable_jobs)
     }
@@ -210,8 +214,12 @@ impl CrontabSources {
     }
 }
 
-pub fn system_crontab_files() -> Result<Vec<InputFile>, CrontabSourcesError> {
-    system_crontab_files_from(SYSTEM_CRONTAB_DIRECTORY.into())
+impl TryFrom<&[InputSource]> for CrontabSources {
+    type Error = CrontabSourcesError;
+
+    fn try_from(sources: &[InputSource]) -> Result<Self, Self::Error> {
+        try_crontab_sources_from(sources, Path::new(SYSTEM_CRONTAB_DIRECTORY))
+    }
 }
 
 impl TryFrom<&[InputFile]> for CrontabSources {
@@ -240,17 +248,58 @@ fn try_read_files(files: &[InputFile]) -> Result<Vec<CrontabFile>, CrontabSource
         .collect()
 }
 
-fn system_crontab_files_from(directory: PathBuf) -> Result<Vec<InputFile>, CrontabSourcesError> {
+fn try_crontab_sources_from(
+    sources: &[InputSource],
+    system_directory: &Path,
+) -> Result<CrontabSources, CrontabSourcesError> {
+    let mut crontabs = Vec::new();
+    let mut files = Vec::new();
+
+    for source in sources {
+        match source {
+            InputSource::User => {
+                crontabs.push(crontab::make_instance().map_err(CrontabSourcesError::UserRead)?);
+            }
+            InputSource::SystemDirectory => {
+                for file in system_crontab_files_from(system_directory)? {
+                    try_push_file(&file, &mut files, &mut crontabs)?;
+                }
+            }
+            InputSource::File(file) => try_push_file(file, &mut files, &mut crontabs)?,
+        }
+    }
+
+    Ok(crontabs.into())
+}
+
+fn try_push_file(
+    input: &InputFile,
+    files: &mut Vec<CrontabFile>,
+    crontabs: &mut Vec<Crontab>,
+) -> Result<(), CrontabSourcesError> {
+    let file = CrontabFile::try_from(input).map_err(|source| CrontabSourcesError::FileRead {
+        path: input.path.clone(),
+        source,
+    })?;
+    if let Some(error) = find_duplicate_file(&file, files) {
+        return Err(error);
+    }
+    crontabs.push(file.parse());
+    files.push(file);
+    Ok(())
+}
+
+fn system_crontab_files_from(directory: &Path) -> Result<Vec<InputFile>, CrontabSourcesError> {
     let entries =
-        std::fs::read_dir(&directory).map_err(|source| CrontabSourcesError::DirectoryRead {
-            path: directory.clone(),
+        std::fs::read_dir(directory).map_err(|source| CrontabSourcesError::DirectoryRead {
+            path: directory.to_path_buf(),
             source,
         })?;
     let mut paths = Vec::new();
 
     for entry in entries {
         let entry = entry.map_err(|source| CrontabSourcesError::DirectoryRead {
-            path: directory.clone(),
+            path: directory.to_path_buf(),
             source,
         })?;
         if !is_system_crontab_filename(&entry.file_name()) {
@@ -284,17 +333,24 @@ fn is_system_crontab_filename(filename: &std::ffi::OsStr) -> bool {
 
 fn find_duplicate_files(files: &[CrontabFile]) -> Option<CrontabSourcesError> {
     for (index, file) in files.iter().enumerate() {
-        if let Some(first) = files[..index]
-            .iter()
-            .find(|first| first.canonical_path == file.canonical_path)
-        {
-            return Some(CrontabSourcesError::DuplicateFile {
-                path: file.path.clone(),
-                first_path: first.path.clone(),
-            });
+        if let Some(error) = find_duplicate_file(file, &files[..index]) {
+            return Some(error);
         }
     }
     None
+}
+
+fn find_duplicate_file(
+    file: &CrontabFile,
+    previous: &[CrontabFile],
+) -> Option<CrontabSourcesError> {
+    let first = previous
+        .iter()
+        .find(|first| first.canonical_path == file.canonical_path)?;
+    Some(CrontabSourcesError::DuplicateFile {
+        path: file.path.clone(),
+        first_path: first.path.clone(),
+    })
 }
 
 impl From<Crontab> for CrontabSources {
@@ -506,7 +562,7 @@ mod tests {
         std::fs::write(&target, "@daily root echo linked").unwrap();
         std::os::unix::fs::symlink(&target, directory.join("linked-file")).unwrap();
 
-        let files = system_crontab_files_from(directory.clone()).unwrap();
+        let files = system_crontab_files_from(&directory).unwrap();
 
         assert_eq!(
             files.iter().map(InputFile::path).collect::<Vec<_>>(),
@@ -524,7 +580,7 @@ mod tests {
         let directory = fresh_system_directory("missing_system_directory");
         std::fs::remove_dir(&directory).unwrap();
 
-        let error = system_crontab_files_from(directory.clone()).unwrap_err();
+        let error = system_crontab_files_from(&directory).unwrap_err();
 
         let CrontabSourcesError::DirectoryRead { path, source } = &error else {
             panic!()
@@ -539,7 +595,7 @@ mod tests {
     fn discovered_system_files_use_system_parsing() {
         let directory = fresh_system_directory("discovered_system_files_use_system_parsing");
         std::fs::write(directory.join("example"), "@daily root echo system").unwrap();
-        let files = system_crontab_files_from(directory).unwrap();
+        let files = system_crontab_files_from(&directory).unwrap();
 
         let sources = CrontabSources::try_from(files.as_slice()).unwrap();
 
@@ -552,12 +608,44 @@ mod tests {
         let directory = fresh_system_directory("discovered_and_explicit_duplicates");
         let path = directory.join("example");
         std::fs::write(&path, "@daily root echo system").unwrap();
-        let mut files = vec![InputFile::from_system(path.clone())];
-        files.extend(system_crontab_files_from(directory).unwrap());
+        let sources = [
+            InputSource::File(InputFile::from_system(path)),
+            InputSource::SystemDirectory,
+        ];
 
-        let error = CrontabSources::try_from(files.as_slice()).unwrap_err();
+        let error = try_crontab_sources_from(&sources, &directory).unwrap_err();
 
         assert!(matches!(error, CrontabSourcesError::DuplicateFile { .. }));
+    }
+
+    #[test]
+    fn aggregate_sources_are_expanded_in_input_order() {
+        let directory = fresh_system_directory("aggregate_sources_are_ordered");
+        let first = directory.join("first.cron");
+        let last = directory.join("last.cron");
+        std::fs::write(&first, "@daily echo first").unwrap();
+        std::fs::write(directory.join("middle"), "@daily root echo middle").unwrap();
+        std::fs::write(&last, "@daily echo last").unwrap();
+        let inputs = [
+            InputSource::File(InputFile::from_crontab(first)),
+            InputSource::SystemDirectory,
+            InputSource::File(InputFile::from_crontab(last)),
+        ];
+
+        let sources = try_crontab_sources_from(&inputs, &directory).unwrap();
+
+        assert_eq!(
+            sources
+                .jobs()
+                .iter()
+                .map(|job| job.command.as_str())
+                .collect::<Vec<_>>(),
+            ["echo first", "echo middle", "echo last"]
+        );
+        assert_eq!(
+            sources.jobs().iter().map(|job| job.uid).collect::<Vec<_>>(),
+            [1, 2, 3]
+        );
     }
 
     #[test]
@@ -594,25 +682,6 @@ mod tests {
         assert_eq!(documents.len(), 2);
         assert_eq!(documents[0].jobs()[0].command, "echo first");
         assert_eq!(documents[1].jobs()[0].command, "echo second");
-    }
-
-    #[test]
-    fn prepending_a_source_reassigns_uids_without_changing_fingerprints() {
-        let user = Crontab::new(Parser::parse("@daily echo user"));
-        let file = Crontab::new(Parser::parse_with_document_id("@daily echo file", b"file"));
-        let user_fingerprint = user.jobs()[0].fingerprint;
-        let file_fingerprint = file.jobs()[0].fingerprint;
-        let mut sources = CrontabSources::from(file);
-
-        sources.prepend(user);
-
-        assert_eq!(sources.documents().len(), 2);
-        assert_eq!(sources.jobs()[0].command, "echo user");
-        assert_eq!(sources.jobs()[0].uid, 1);
-        assert_eq!(sources.jobs()[0].fingerprint, user_fingerprint);
-        assert_eq!(sources.jobs()[1].command, "echo file");
-        assert_eq!(sources.jobs()[1].uid, 2);
-        assert_eq!(sources.jobs()[1].fingerprint, file_fingerprint);
     }
 
     #[test]

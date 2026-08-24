@@ -144,6 +144,30 @@ fn user_includes_live_crontab_before_explicit_files() {
 }
 
 #[test]
+fn sources_follow_command_line_order_when_file_precedes_user() {
+    let bin_directory = temporary_directory("file_before_user");
+    let mock = bin_directory.join("crontab");
+    fs::copy(fixture("crontab_example.sh"), &mock).unwrap();
+    let mut permissions = fs::metadata(&mock).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&mock, permissions).unwrap();
+    let file = fixture("crontab_file_one.cron");
+
+    let output = crn()
+        .env("PATH", format!("{}:/bin:/usr/bin", bin_directory.display()))
+        .args(["--file", file.to_str().unwrap(), "--user", "--list-only"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let stdout = stdout(&output);
+    let file_position = stdout.find("First file job.").unwrap();
+    let user_position = stdout.find("$HOME/bin/daily.job").unwrap();
+    assert!(file_position < user_position, "{stdout}");
+    assert!(stdout.contains("1. First file job."), "{stdout}");
+}
+
+#[test]
 fn user_alone_matches_the_default_source() {
     let bin_directory = temporary_directory("user_matches_default");
     let mock = bin_directory.join("crontab");

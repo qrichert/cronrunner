@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::job::Job;
-use super::sources::InputFile;
+use super::sources::{InputFile, InputSource};
 use super::ui;
 
 #[allow(clippy::struct_excessive_bools)]
@@ -15,10 +15,8 @@ pub struct Config {
     pub fingerprint: bool,
     pub tag: bool,
     pub detach: bool,
-    pub user: bool,
-    pub system: bool,
     pub env_file: Option<PathBuf>,
-    pub crontab_files: Vec<InputFile>,
+    pub crontab_sources: Vec<InputSource>,
     pub job: Option<Job>,
 }
 
@@ -83,12 +81,19 @@ impl Config {
             }
 
             if arg == "--user" {
-                config.user = true;
+                if !config.crontab_sources.contains(&InputSource::User) {
+                    config.crontab_sources.push(InputSource::User);
+                }
                 continue;
             }
 
             if arg == "--system" {
-                config.system = true;
+                if !config
+                    .crontab_sources
+                    .contains(&InputSource::SystemDirectory)
+                {
+                    config.crontab_sources.push(InputSource::SystemDirectory);
+                }
                 continue;
             }
 
@@ -107,7 +112,9 @@ impl Config {
                 let Some(file) = iter.next().map(PathBuf::from) else {
                     return Err(format!("Expected file path after '{arg}'"));
                 };
-                config.crontab_files.push(InputFile::from_crontab(file));
+                config
+                    .crontab_sources
+                    .push(InputSource::File(InputFile::from_crontab(file)));
                 continue;
             }
 
@@ -115,7 +122,9 @@ impl Config {
                 let Some(file) = iter.next().map(PathBuf::from) else {
                     return Err(format!("Expected file path after '{arg}'"));
                 };
-                config.crontab_files.push(InputFile::from_system(file));
+                config
+                    .crontab_sources
+                    .push(InputSource::File(InputFile::from_system(file)));
                 continue;
             }
 
@@ -145,6 +154,10 @@ impl Config {
 
         if config.tag && config.job.is_none() {
             return Err(String::from("Option '--tag' requires a tag"));
+        }
+
+        if config.crontab_sources.is_empty() {
+            config.crontab_sources.push(InputSource::User);
         }
 
         Ok(config)
@@ -305,6 +318,9 @@ Crontab source:
   Variables from one crontab don't leak into the other, and job
   fingerprints remain stable even if you reorder the sources.
 
+  Source options are processed from left to right, and job IDs follow
+  that order.
+
   To read a system crontab file, use `--system-file`. To include all
   system crontabs from `/etc/cron.d`, use `--system`.
 
@@ -386,10 +402,8 @@ mod tests {
                 fingerprint: false,
                 tag: false,
                 detach: false,
-                user: false,
-                system: false,
                 env_file: None,
-                crontab_files: Vec::new(),
+                crontab_sources: Vec::new(),
                 job: None,
             }
         );
@@ -401,7 +415,7 @@ mod tests {
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert_eq!(config, Config::default());
+        assert_eq!(config.crontab_sources, [InputSource::User]);
     }
 
     #[test]
@@ -410,7 +424,7 @@ mod tests {
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert_eq!(config, Config::default());
+        assert_eq!(config.crontab_sources, [InputSource::User]);
     }
 
     #[test]
@@ -896,7 +910,7 @@ mod tests {
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(config.user);
+        assert_eq!(config.crontab_sources, [InputSource::User]);
     }
 
     #[test]
@@ -911,7 +925,7 @@ mod tests {
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(config.user);
+        assert_eq!(config.crontab_sources, [InputSource::User]);
         assert!(config.list_only);
     }
 
@@ -921,7 +935,7 @@ mod tests {
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(config.system);
+        assert_eq!(config.crontab_sources, [InputSource::SystemDirectory]);
     }
 
     #[test]
@@ -936,8 +950,10 @@ mod tests {
 
         let config = Config::build_from_args(args).unwrap();
 
-        assert!(config.system);
-        assert!(config.user);
+        assert_eq!(
+            config.crontab_sources,
+            [InputSource::SystemDirectory, InputSource::User]
+        );
     }
 
     #[test]
@@ -952,8 +968,10 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
-            [InputFile::from_crontab(PathBuf::from("./personal.cron"))]
+            config.crontab_sources,
+            [InputSource::File(InputFile::from_crontab(PathBuf::from(
+                "./personal.cron"
+            )))]
         );
     }
 
@@ -969,8 +987,10 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
-            [InputFile::from_crontab(PathBuf::from("./personal.cron"))]
+            config.crontab_sources,
+            [InputSource::File(InputFile::from_crontab(PathBuf::from(
+                "./personal.cron"
+            )))]
         );
     }
 
@@ -989,10 +1009,10 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
+            config.crontab_sources,
             [
-                InputFile::from_crontab(PathBuf::from("personal.cron")),
-                InputFile::from_crontab(PathBuf::from("project.cron"))
+                InputSource::File(InputFile::from_crontab(PathBuf::from("personal.cron"))),
+                InputSource::File(InputFile::from_crontab(PathBuf::from("project.cron")))
             ]
         );
         assert!(config.list_only);
@@ -1019,8 +1039,10 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
-            [InputFile::from_system(PathBuf::from("/etc/cron.d/example"))]
+            config.crontab_sources,
+            [InputSource::File(InputFile::from_system(PathBuf::from(
+                "/etc/cron.d/example"
+            )))]
         );
     }
 
@@ -1036,8 +1058,10 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
-            [InputFile::from_system(PathBuf::from("/etc/cron.d/example"))]
+            config.crontab_sources,
+            [InputSource::File(InputFile::from_system(PathBuf::from(
+                "/etc/cron.d/example"
+            )))]
         );
     }
 
@@ -1066,11 +1090,37 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
+            config.crontab_sources,
             [
-                InputFile::from_crontab(PathBuf::from("personal.cron")),
-                InputFile::from_system(PathBuf::from("/etc/cron.d/system")),
-                InputFile::from_crontab(PathBuf::from("project.cron")),
+                InputSource::File(InputFile::from_crontab(PathBuf::from("personal.cron"))),
+                InputSource::File(InputFile::from_system(PathBuf::from("/etc/cron.d/system"))),
+                InputSource::File(InputFile::from_crontab(PathBuf::from("project.cron"))),
+            ]
+        );
+    }
+
+    #[test]
+    fn all_source_arguments_preserve_relative_order() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("-f"),
+            String::from("first.cron"),
+            String::from("--user"),
+            String::from("-F"),
+            String::from("system.cron"),
+            String::from("--system"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert_eq!(
+            config.crontab_sources,
+            [
+                InputSource::File(InputFile::from_crontab(PathBuf::from("first.cron"))),
+                InputSource::User,
+                InputSource::File(InputFile::from_system(PathBuf::from("system.cron"))),
+                InputSource::SystemDirectory,
             ]
         );
     }

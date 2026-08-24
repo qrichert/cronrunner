@@ -7,12 +7,12 @@ use std::path::{Path, PathBuf};
 
 use lessify::Pager;
 
-use cronrunner::crontab::{self, Crontab, RunResult, RunResultDetail};
+use cronrunner::crontab::{Crontab, RunResult, RunResultDetail};
 use cronrunner::reader::{ReadError, ReadErrorDetail};
 use cronrunner::tokens::{CronJob, JobDescription, JobSection};
 
 use crate::cli::exit_status::ExitStatus;
-use crate::cli::sources::{CrontabSources, CrontabSourcesError, system_crontab_files};
+use crate::cli::sources::{CrontabSources, CrontabSourcesError};
 use crate::cli::{args, job::Job, ui};
 
 #[cfg(not(tarpaulin_include))]
@@ -45,35 +45,9 @@ fn main() -> ExitStatus {
         }
     };
 
-    let include_user_crontab = should_include_user_crontab(&config);
-    let user_crontab = if include_user_crontab {
-        match crontab::make_instance() {
-            Ok(crontab) => Some(crontab),
-            Err(error) => return exit_from_crontab_read_error(&error),
-        }
-    } else {
-        None
-    };
-
-    let mut crontab_files = config.crontab_files;
-    if config.system {
-        match system_crontab_files() {
-            Ok(files) => crontab_files.extend(files),
-            Err(error) => return exit_from_crontab_sources_error(&error),
-        }
-    }
-
-    let mut sources = if crontab_files.is_empty() && include_user_crontab {
-        CrontabSources::from(user_crontab.expect("default source must include user crontab"))
-    } else {
-        let mut sources = match CrontabSources::try_from(crontab_files.as_slice()) {
-            Ok(sources) => sources,
-            Err(error) => return exit_from_crontab_sources_error(&error),
-        };
-        if let Some(user_crontab) = user_crontab {
-            sources.prepend(user_crontab);
-        }
-        sources
+    let mut sources = match CrontabSources::try_from(config.crontab_sources.as_slice()) {
+        Ok(sources) => sources,
+        Err(error) => return exit_from_crontab_sources_error(&error),
     };
 
     if !sources.has_runnable_jobs() {
@@ -125,10 +99,6 @@ fn main() -> ExitStatus {
     exit_from_run_result(res)
 }
 
-fn should_include_user_crontab(config: &args::Config) -> bool {
-    config.user || (!config.system && config.crontab_files.is_empty())
-}
-
 fn exit_from_arguments_error(arg: &str) -> ExitStatus {
     eprintln!("{}", args::bad_arguments_error_message(arg));
     ExitStatus::ArgsError
@@ -136,6 +106,7 @@ fn exit_from_arguments_error(arg: &str) -> ExitStatus {
 
 fn exit_from_crontab_sources_error(error: &CrontabSourcesError) -> ExitStatus {
     match error {
+        CrontabSourcesError::UserRead(error) => exit_from_crontab_read_error(error),
         CrontabSourcesError::DirectoryRead { .. } => {
             eprintln!("{label}: {error}.", label = ui::Color::error("error"));
             ExitStatus::Failure
@@ -1216,28 +1187,13 @@ mod tests {
     }
 
     #[test]
-    fn user_source_is_implicit_only_without_other_aggregate_sources() {
-        let default = args::Config::default();
-        let system = args::Config {
-            system: true,
-            ..args::Config::default()
-        };
-        let file = args::Config {
-            crontab_files: vec![crate::cli::sources::InputFile::from_crontab(PathBuf::from(
-                "example",
-            ))],
-            ..args::Config::default()
-        };
-        let user_and_system = args::Config {
-            user: true,
-            system: true,
-            ..args::Config::default()
-        };
+    fn exit_from_crontab_sources_user_read_error_preserves_handling() {
+        let error = CrontabSourcesError::UserRead(ReadError {
+            reason: "Cannot read crontab of current user.",
+            detail: ReadErrorDetail::CouldNotRunCommand,
+        });
 
-        assert!(should_include_user_crontab(&default));
-        assert!(!should_include_user_crontab(&system));
-        assert!(!should_include_user_crontab(&file));
-        assert!(should_include_user_crontab(&user_and_system));
+        assert_eq!(exit_from_crontab_sources_error(&error), ExitStatus::Failure);
     }
 
     #[test]
