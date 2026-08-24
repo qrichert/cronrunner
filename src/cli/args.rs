@@ -21,6 +21,7 @@ pub struct Config {
 }
 
 impl Config {
+    #[allow(clippy::too_many_lines)]
     pub fn build_from_args(args: impl Iterator<Item = String>) -> Result<Self, String> {
         let mut config = Self::default();
 

@@ -50,6 +50,7 @@ impl Source {
     /// A source resolves to one or more [`Read`]s: files and the live
     /// crontab resolve to one; `--system` fans out over its directory.
     fn read(&self) -> Result<Vec<Read>, CrontabSourcesError> {
+        // Read every variant via `source.read()`, never by hand.
         match self {
             Self::UserCrontab(source) => Ok(vec![source.read()?]),
             Self::UserFile(source) => Ok(vec![source.read()?]),
@@ -60,9 +61,10 @@ impl Source {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct UserCrontab;
+pub struct UserCrontab;
 
 impl UserCrontab {
+    #[allow(clippy::unused_self)]
     fn read(&self) -> Result<Read, CrontabSourcesError> {
         let contents = Reader::read().map_err(CrontabSourcesError::LiveRead)?;
         Ok(Read::Live(contents))
@@ -70,7 +72,7 @@ impl UserCrontab {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct UserFile(PathBuf);
+pub struct UserFile(PathBuf);
 
 impl UserFile {
     fn read(&self) -> Result<Read, CrontabSourcesError> {
@@ -79,12 +81,13 @@ impl UserFile {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct SystemCrontab;
+pub struct SystemCrontab;
 
 impl SystemCrontab {
     /// Fan out over the system crontab locations, reading each as a
     /// system file: `--system` is just a multi-file special case that
     /// delegates to normal file reading.
+    #[allow(clippy::unused_self)]
     fn read(&self) -> Result<Vec<Read>, CrontabSourcesError> {
         system_crontab_paths()?
             .iter()
@@ -94,7 +97,7 @@ impl SystemCrontab {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct SystemFile(PathBuf);
+pub struct SystemFile(PathBuf);
 
 impl SystemFile {
     fn read(&self) -> Result<Read, CrontabSourcesError> {
@@ -275,8 +278,7 @@ impl Error for CrontabSourcesError {
         match self {
             Self::LiveRead(source) => Some(source),
             Self::FileRead { source, .. } => Some(source),
-            Self::DuplicateFile { .. } => None,
-            Self::DuplicateSource { .. } => None,
+            Self::DuplicateFile { .. } | Self::DuplicateSource { .. } => None,
         }
     }
 }
