@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use super::job::Job;
-use super::sources::InputFile;
+use super::sources::Source;
 use super::ui;
 
 #[allow(clippy::struct_excessive_bools)]
@@ -16,7 +16,7 @@ pub struct Config {
     pub tag: bool,
     pub detach: bool,
     pub env_file: Option<PathBuf>,
-    pub crontab_files: Vec<InputFile>,
+    pub crontab_sources: Vec<Source>,
     pub job: Option<Job>,
 }
 
@@ -95,7 +95,7 @@ impl Config {
                 let Some(file) = iter.next().map(PathBuf::from) else {
                     return Err(format!("Expected file path after '{arg}'"));
                 };
-                config.crontab_files.push(InputFile::from_crontab(file));
+                config.crontab_sources.push(Source::from_user_file(file));
                 continue;
             }
 
@@ -103,7 +103,17 @@ impl Config {
                 let Some(file) = iter.next().map(PathBuf::from) else {
                     return Err(format!("Expected file path after '{arg}'"));
                 };
-                config.crontab_files.push(InputFile::from_system(file));
+                config.crontab_sources.push(Source::from_system_file(file));
+                continue;
+            }
+
+            if arg == "--user" {
+                config.crontab_sources.push(Source::from_user_crontab());
+                continue;
+            }
+
+            if arg == "--system" {
+                config.crontab_sources.push(Source::from_system_crontab());
                 continue;
             }
 
@@ -366,7 +376,7 @@ mod tests {
                 tag: false,
                 detach: false,
                 env_file: None,
-                crontab_files: Vec::new(),
+                crontab_sources: Vec::new(),
                 job: None,
             }
         );
@@ -877,8 +887,8 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
-            [InputFile::from_crontab(PathBuf::from("./personal.cron"))]
+            config.crontab_sources,
+            [Source::from_user_file(PathBuf::from("./personal.cron"))]
         );
     }
 
@@ -894,8 +904,8 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
-            [InputFile::from_crontab(PathBuf::from("./personal.cron"))]
+            config.crontab_sources,
+            [Source::from_user_file(PathBuf::from("./personal.cron"))]
         );
     }
 
@@ -914,10 +924,10 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
+            config.crontab_sources,
             [
-                InputFile::from_crontab(PathBuf::from("personal.cron")),
-                InputFile::from_crontab(PathBuf::from("project.cron"))
+                Source::from_user_file(PathBuf::from("personal.cron")),
+                Source::from_user_file(PathBuf::from("project.cron"))
             ]
         );
         assert!(config.list_only);
@@ -944,8 +954,10 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
-            [InputFile::from_system(PathBuf::from("/etc/cron.d/example"))]
+            config.crontab_sources,
+            [Source::from_system_file(PathBuf::from(
+                "/etc/cron.d/example"
+            ))]
         );
     }
 
@@ -961,8 +973,10 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
-            [InputFile::from_system(PathBuf::from("/etc/cron.d/example"))]
+            config.crontab_sources,
+            [Source::from_system_file(PathBuf::from(
+                "/etc/cron.d/example"
+            ))]
         );
     }
 
@@ -991,11 +1005,11 @@ mod tests {
         let config = Config::build_from_args(args).unwrap();
 
         assert_eq!(
-            config.crontab_files,
+            config.crontab_sources,
             [
-                InputFile::from_crontab(PathBuf::from("personal.cron")),
-                InputFile::from_system(PathBuf::from("/etc/cron.d/system")),
-                InputFile::from_crontab(PathBuf::from("project.cron")),
+                Source::from_user_file(PathBuf::from("personal.cron")),
+                Source::from_system_file(PathBuf::from("/etc/cron.d/system")),
+                Source::from_user_file(PathBuf::from("project.cron")),
             ]
         );
     }
