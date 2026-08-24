@@ -12,7 +12,7 @@ use cronrunner::reader::{ReadError, ReadErrorDetail};
 use cronrunner::tokens::{CronJob, JobDescription, JobSection};
 
 use crate::cli::exit_status::ExitStatus;
-use crate::cli::sources::{CrontabSources, CrontabSourcesError};
+use crate::cli::sources::{CrontabSources, CrontabSourcesError, system_crontab_files};
 use crate::cli::{args, job::Job, ui};
 
 #[cfg(not(tarpaulin_include))]
@@ -45,7 +45,7 @@ fn main() -> ExitStatus {
         }
     };
 
-    let include_user_crontab = config.user || config.crontab_files.is_empty();
+    let include_user_crontab = should_include_user_crontab(&config);
     let user_crontab = if include_user_crontab {
         match crontab::make_instance() {
             Ok(crontab) => Some(crontab),
@@ -55,10 +55,18 @@ fn main() -> ExitStatus {
         None
     };
 
-    let mut sources = if config.crontab_files.is_empty() {
+    let mut crontab_files = config.crontab_files;
+    if config.system {
+        match system_crontab_files() {
+            Ok(files) => crontab_files.extend(files),
+            Err(error) => return exit_from_crontab_sources_error(&error),
+        }
+    }
+
+    let mut sources = if crontab_files.is_empty() && include_user_crontab {
         CrontabSources::from(user_crontab.expect("default source must include user crontab"))
     } else {
-        let mut sources = match CrontabSources::try_from(config.crontab_files.as_slice()) {
+        let mut sources = match CrontabSources::try_from(crontab_files.as_slice()) {
             Ok(sources) => sources,
             Err(error) => return exit_from_crontab_sources_error(&error),
         };
@@ -117,6 +125,10 @@ fn main() -> ExitStatus {
     exit_from_run_result(res)
 }
 
+fn should_include_user_crontab(config: &args::Config) -> bool {
+    config.user || (!config.system && config.crontab_files.is_empty())
+}
+
 fn exit_from_arguments_error(arg: &str) -> ExitStatus {
     eprintln!("{}", args::bad_arguments_error_message(arg));
     ExitStatus::ArgsError
@@ -124,6 +136,10 @@ fn exit_from_arguments_error(arg: &str) -> ExitStatus {
 
 fn exit_from_crontab_sources_error(error: &CrontabSourcesError) -> ExitStatus {
     match error {
+        CrontabSourcesError::DirectoryRead { .. } => {
+            eprintln!("{label}: {error}.", label = ui::Color::error("error"));
+            ExitStatus::Failure
+        }
         CrontabSourcesError::FileRead { .. } => {
             eprintln!("{label}: {error}.", label = ui::Color::error("error"));
             ExitStatus::Failure
@@ -1187,6 +1203,41 @@ mod tests {
         };
 
         assert_eq!(exit_from_crontab_sources_error(&error), ExitStatus::Failure);
+    }
+
+    #[test]
+    fn exit_from_crontab_sources_directory_read_error_is_failure() {
+        let error = CrontabSourcesError::DirectoryRead {
+            path: PathBuf::from("/etc/cron.d"),
+            source: io::Error::from(io::ErrorKind::PermissionDenied),
+        };
+
+        assert_eq!(exit_from_crontab_sources_error(&error), ExitStatus::Failure);
+    }
+
+    #[test]
+    fn user_source_is_implicit_only_without_other_aggregate_sources() {
+        let default = args::Config::default();
+        let system = args::Config {
+            system: true,
+            ..args::Config::default()
+        };
+        let file = args::Config {
+            crontab_files: vec![crate::cli::sources::InputFile::from_crontab(PathBuf::from(
+                "example",
+            ))],
+            ..args::Config::default()
+        };
+        let user_and_system = args::Config {
+            user: true,
+            system: true,
+            ..args::Config::default()
+        };
+
+        assert!(should_include_user_crontab(&default));
+        assert!(!should_include_user_crontab(&system));
+        assert!(!should_include_user_crontab(&file));
+        assert!(should_include_user_crontab(&user_and_system));
     }
 
     #[test]

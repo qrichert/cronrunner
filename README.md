@@ -45,6 +45,7 @@ Options:
   -t, --tag <TAG>           Run specific tag.
   -d, --detach              Run job in the background.
       --user                Include the current user's crontab.
+      --system              Include system crontabs from /etc/cron.d.
   -e, --env <FILE>          Override job environment.
   -f, --file <FILE>         Read jobs from a file (repeatable).
   -F, --system-file <FILE>  Read jobs from a system file (repeatable).
@@ -179,19 +180,25 @@ If you pass multiple file sources, they are read and run in isolation.
 Variables from one crontab don't leak into the other, and job
 fingerprints remain stable even if you reorder the sources.
 
-To read a system crontab file, use `--system-file`.
+To read a system crontab file, use `--system-file`. To include all system
+crontabs from `/etc/cron.d`, use `--system`.
 
 Passing a file replaces the default current-user source. To include the
 current user's crontab alongside file sources, pass `--user`:
 
 ```console
 $ crn --user --file project.cron --list-only
+$ crn --user --system --list-only
 ```
 
 ### System crontabs
 
 System crontabs typically live in `/etc/cron.d/*` and have an additional
 `user` field in-between the schedule and the command.
+
+When using `--system`, cronrunner reads regular files (including
+symlinks to files) whose names contain only letters, digits, `_`, or
+`-`, matching Cron's convention. Files are ordered by name.
 
 cronrunner will display that user in the jobs list, but it will not use
 it to run jobs. If you want to run jobs as a different user, do it

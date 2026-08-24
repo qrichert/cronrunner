@@ -16,6 +16,7 @@ pub struct Config {
     pub tag: bool,
     pub detach: bool,
     pub user: bool,
+    pub system: bool,
     pub env_file: Option<PathBuf>,
     pub crontab_files: Vec<InputFile>,
     pub job: Option<Job>,
@@ -83,6 +84,11 @@ impl Config {
 
             if arg == "--user" {
                 config.user = true;
+                continue;
+            }
+
+            if arg == "--system" {
+                config.system = true;
                 continue;
             }
 
@@ -179,6 +185,7 @@ Options:
   -t, --tag <TAG>           Run specific tag.
   -d, --detach              Run job in the background.
       --user                Include the current user's crontab.
+      --system              Include system crontabs from /etc/cron.d.
   -e, --env <FILE>          Override job environment.
   -f, --file <FILE>         Read jobs from a file (repeatable).
   -F, --system-file <FILE>  Read jobs from a system file (repeatable).
@@ -298,12 +305,14 @@ Crontab source:
   Variables from one crontab don't leak into the other, and job
   fingerprints remain stable even if you reorder the sources.
 
-  To read a system crontab file, use `--system-file`.
+  To read a system crontab file, use `--system-file`. To include all
+  system crontabs from `/etc/cron.d`, use `--system`.
 
   Passing a file replaces the default current-user source. To include
   the current user's crontab alongside file sources, pass `--user`:
 
       {highlight}${reset} {bin} --user --file project.cron --list-only
+      {highlight}${reset} {bin} --user --system --list-only
 
 System crontabs:
   System crontabs typically live in `/etc/cron.d/*` and have an
@@ -378,6 +387,7 @@ mod tests {
                 tag: false,
                 detach: false,
                 user: false,
+                system: false,
                 env_file: None,
                 crontab_files: Vec::new(),
                 job: None,
@@ -464,6 +474,7 @@ mod tests {
         assert!(message.contains("-t, --tag"));
         assert!(message.contains("-d, --detach"));
         assert!(message.contains("--user"));
+        assert!(message.contains("--system "));
         assert!(message.contains("-e, --env <FILE>"));
         assert!(message.contains("-f, --file <FILE>"));
     }
@@ -902,6 +913,31 @@ mod tests {
 
         assert!(config.user);
         assert!(config.list_only);
+    }
+
+    #[test]
+    fn argument_system() {
+        let args = [String::from("/usr/local/bin/crn"), String::from("--system")].into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.system);
+    }
+
+    #[test]
+    fn argument_system_is_repeatable_and_combines_with_user() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--system"),
+            String::from("--user"),
+            String::from("--system"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.system);
+        assert!(config.user);
     }
 
     #[test]

@@ -10,6 +10,8 @@ use cronrunner::tokens::{CronJob, Token};
 
 use super::job::Job;
 
+const SYSTEM_CRONTAB_DIRECTORY: &str = "/etc/cron.d";
+
 /// File source for a crontab.
 ///
 /// This encodes the kind (normal crontab vs. system crontab). `kind`
@@ -113,6 +115,7 @@ impl TryFrom<&InputFile> for CrontabFile {
 // TODO: We should align those with `crontab::ReadError`.
 #[derive(Debug)]
 pub enum CrontabSourcesError {
+    DirectoryRead { path: PathBuf, source: io::Error },
     FileRead { path: PathBuf, source: io::Error },
     DuplicateFile { path: PathBuf, first_path: PathBuf },
 }
@@ -120,6 +123,11 @@ pub enum CrontabSourcesError {
 impl fmt::Display for CrontabSourcesError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::DirectoryRead { path, source } => write!(
+                f,
+                "Cannot read system crontab directory '{}': {source}",
+                path.display()
+            ),
             Self::FileRead { path, source } => {
                 write!(f, "Cannot read crontab file '{}': {source}", path.display())
             }
@@ -136,6 +144,7 @@ impl fmt::Display for CrontabSourcesError {
 impl Error for CrontabSourcesError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            Self::DirectoryRead { source, .. } => Some(source),
             Self::FileRead { source, .. } => Some(source),
             Self::DuplicateFile { .. } => None,
         }
@@ -201,6 +210,10 @@ impl CrontabSources {
     }
 }
 
+pub fn system_crontab_files() -> Result<Vec<InputFile>, CrontabSourcesError> {
+    system_crontab_files_from(SYSTEM_CRONTAB_DIRECTORY.into())
+}
+
 impl TryFrom<&[InputFile]> for CrontabSources {
     type Error = CrontabSourcesError;
 
@@ -225,6 +238,48 @@ fn try_read_files(files: &[InputFile]) -> Result<Vec<CrontabFile>, CrontabSource
             })
         })
         .collect()
+}
+
+fn system_crontab_files_from(directory: PathBuf) -> Result<Vec<InputFile>, CrontabSourcesError> {
+    let entries =
+        std::fs::read_dir(&directory).map_err(|source| CrontabSourcesError::DirectoryRead {
+            path: directory.clone(),
+            source,
+        })?;
+    let mut paths = Vec::new();
+
+    for entry in entries {
+        let entry = entry.map_err(|source| CrontabSourcesError::DirectoryRead {
+            path: directory.clone(),
+            source,
+        })?;
+        if !is_system_crontab_filename(&entry.file_name()) {
+            continue;
+        }
+
+        let path = entry.path();
+        let metadata =
+            std::fs::metadata(&path).map_err(|source| CrontabSourcesError::FileRead {
+                path: path.clone(),
+                source,
+            })?;
+        if metadata.is_file() {
+            paths.push(path);
+        }
+    }
+
+    paths.sort();
+    Ok(paths.into_iter().map(InputFile::from_system).collect())
+}
+
+fn is_system_crontab_filename(filename: &std::ffi::OsStr) -> bool {
+    let Some(filename) = filename.to_str() else {
+        return false;
+    };
+    !filename.is_empty()
+        && filename
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
 fn find_duplicate_files(files: &[CrontabFile]) -> Option<CrontabSourcesError> {
@@ -301,6 +356,17 @@ mod tests {
     use cronrunner::tokens::{CronJob, JobSection};
 
     use super::*;
+
+    fn fresh_system_directory(name: &str) -> PathBuf {
+        let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target/tmp/sources_tests")
+            .join(name);
+        if directory.exists() {
+            std::fs::remove_dir_all(&directory).unwrap();
+        }
+        std::fs::create_dir_all(&directory).unwrap();
+        directory
+    }
 
     #[test]
     fn file_paths_are_canonicalized() {
@@ -427,6 +493,71 @@ mod tests {
         };
         assert_eq!(path, invalid);
         assert_eq!(source.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn system_directory_filters_and_sorts_crontab_files() {
+        let directory = fresh_system_directory("system_directory_filters_and_sorts");
+        std::fs::write(directory.join("z-last"), "@daily root echo last").unwrap();
+        std::fs::write(directory.join("a_first"), "@daily root echo first").unwrap();
+        std::fs::write(directory.join("ignored.cron"), "@daily root echo ignored").unwrap();
+        std::fs::create_dir(directory.join("directory")).unwrap();
+        let target = directory.join("target.backup");
+        std::fs::write(&target, "@daily root echo linked").unwrap();
+        std::os::unix::fs::symlink(&target, directory.join("linked-file")).unwrap();
+
+        let files = system_crontab_files_from(directory.clone()).unwrap();
+
+        assert_eq!(
+            files.iter().map(InputFile::path).collect::<Vec<_>>(),
+            [
+                &directory.join("a_first"),
+                &directory.join("linked-file"),
+                &directory.join("z-last"),
+            ]
+        );
+        assert!(files.iter().all(|file| file.kind == Kind::System));
+    }
+
+    #[test]
+    fn missing_system_directory_retains_path_and_io_error() {
+        let directory = fresh_system_directory("missing_system_directory");
+        std::fs::remove_dir(&directory).unwrap();
+
+        let error = system_crontab_files_from(directory.clone()).unwrap_err();
+
+        let CrontabSourcesError::DirectoryRead { path, source } = &error else {
+            panic!()
+        };
+        assert_eq!(path, &directory);
+        assert_eq!(source.kind(), io::ErrorKind::NotFound);
+        assert!(error.to_string().contains(&directory.display().to_string()));
+        assert!(error.source().is_some());
+    }
+
+    #[test]
+    fn discovered_system_files_use_system_parsing() {
+        let directory = fresh_system_directory("discovered_system_files_use_system_parsing");
+        std::fs::write(directory.join("example"), "@daily root echo system").unwrap();
+        let files = system_crontab_files_from(directory).unwrap();
+
+        let sources = CrontabSources::try_from(files.as_slice()).unwrap();
+
+        assert_eq!(sources.jobs()[0].user.as_deref(), Some("root"));
+        assert_eq!(sources.jobs()[0].command, "echo system");
+    }
+
+    #[test]
+    fn discovered_and_explicit_canonical_duplicates_are_rejected() {
+        let directory = fresh_system_directory("discovered_and_explicit_duplicates");
+        let path = directory.join("example");
+        std::fs::write(&path, "@daily root echo system").unwrap();
+        let mut files = vec![InputFile::from_system(path.clone())];
+        files.extend(system_crontab_files_from(directory).unwrap());
+
+        let error = CrontabSources::try_from(files.as_slice()).unwrap_err();
+
+        assert!(matches!(error, CrontabSourcesError::DuplicateFile { .. }));
     }
 
     #[test]
