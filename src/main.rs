@@ -45,16 +45,27 @@ fn main() -> ExitStatus {
         }
     };
 
-    let mut sources = if !config.crontab_files.is_empty() {
-        match CrontabSources::try_from(config.crontab_files.as_slice()) {
-            Ok(sources) => sources,
-            Err(error) => return exit_from_crontab_sources_error(&error),
-        }
-    } else {
+    let include_user_crontab = config.user || config.crontab_files.is_empty();
+    let user_crontab = if include_user_crontab {
         match crontab::make_instance() {
-            Ok(crontab) => CrontabSources::from(crontab),
+            Ok(crontab) => Some(crontab),
             Err(error) => return exit_from_crontab_read_error(&error),
         }
+    } else {
+        None
+    };
+
+    let mut sources = if config.crontab_files.is_empty() {
+        CrontabSources::from(user_crontab.expect("default source must include user crontab"))
+    } else {
+        let mut sources = match CrontabSources::try_from(config.crontab_files.as_slice()) {
+            Ok(sources) => sources,
+            Err(error) => return exit_from_crontab_sources_error(&error),
+        };
+        if let Some(user_crontab) = user_crontab {
+            sources.prepend(user_crontab);
+        }
+        sources
     };
 
     if !sources.has_runnable_jobs() {

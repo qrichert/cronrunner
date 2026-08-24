@@ -120,6 +120,56 @@ fn lists_jobs_from_multiple_files_without_invoking_crontab() {
 }
 
 #[test]
+fn user_includes_live_crontab_before_explicit_files() {
+    let bin_directory = temporary_directory("user_with_file");
+    let mock = bin_directory.join("crontab");
+    fs::copy(fixture("crontab_example.sh"), &mock).unwrap();
+    let mut permissions = fs::metadata(&mock).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&mock, permissions).unwrap();
+    let file = fixture("crontab_file_one.cron");
+
+    let output = crn()
+        .env("PATH", format!("{}:/bin:/usr/bin", bin_directory.display()))
+        .args(["--user", "--file", file.to_str().unwrap(), "--list-only"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let stdout = stdout(&output);
+    let user_position = stdout.find("$HOME/bin/daily.job").unwrap();
+    let file_position = stdout.find("First file job.").unwrap();
+    assert!(user_position < file_position, "{stdout}");
+    assert!(stdout.contains("6. First file job."), "{stdout}");
+}
+
+#[test]
+fn user_alone_matches_the_default_source() {
+    let bin_directory = temporary_directory("user_matches_default");
+    let mock = bin_directory.join("crontab");
+    fs::copy(fixture("crontab_example.sh"), &mock).unwrap();
+    let mut permissions = fs::metadata(&mock).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&mock, permissions).unwrap();
+    let path = format!("{}:/bin:/usr/bin", bin_directory.display());
+
+    let default = crn()
+        .env("PATH", &path)
+        .arg("--list-only")
+        .output()
+        .unwrap();
+    let explicit = crn()
+        .env("PATH", path)
+        .args(["--user", "--list-only"])
+        .output()
+        .unwrap();
+
+    assert!(default.status.success(), "{}", stderr(&default));
+    assert!(explicit.status.success(), "{}", stderr(&explicit));
+    assert_eq!(stdout(&explicit), stdout(&default));
+}
+
+#[test]
 fn system_file_lists_jobs_with_their_user() {
     let file = fixture("crontab_system.cron");
 

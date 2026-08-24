@@ -15,6 +15,7 @@ pub struct Config {
     pub fingerprint: bool,
     pub tag: bool,
     pub detach: bool,
+    pub user: bool,
     pub env_file: Option<PathBuf>,
     pub crontab_files: Vec<InputFile>,
     pub job: Option<Job>,
@@ -77,6 +78,11 @@ impl Config {
 
             if arg == "-d" || arg == "--detach" {
                 config.detach = true;
+                continue;
+            }
+
+            if arg == "--user" {
+                config.user = true;
                 continue;
             }
 
@@ -172,6 +178,7 @@ Options:
       --fingerprint         Use job fingerprints.
   -t, --tag <TAG>           Run specific tag.
   -d, --detach              Run job in the background.
+      --user                Include the current user's crontab.
   -e, --env <FILE>          Override job environment.
   -f, --file <FILE>         Read jobs from a file (repeatable).
   -F, --system-file <FILE>  Read jobs from a system file (repeatable).
@@ -293,6 +300,11 @@ Crontab source:
 
   To read a system crontab file, use `--system-file`.
 
+  Passing a file replaces the default current-user source. To include
+  the current user's crontab alongside file sources, pass `--user`:
+
+      {highlight}${reset} {bin} --user --file project.cron --list-only
+
 System crontabs:
   System crontabs typically live in `/etc/cron.d/*` and have an
   additional `user` field in-between the schedule and the command.
@@ -365,6 +377,7 @@ mod tests {
                 fingerprint: false,
                 tag: false,
                 detach: false,
+                user: false,
                 env_file: None,
                 crontab_files: Vec::new(),
                 job: None,
@@ -450,6 +463,7 @@ mod tests {
         assert!(message.contains("--fingerprint"));
         assert!(message.contains("-t, --tag"));
         assert!(message.contains("-d, --detach"));
+        assert!(message.contains("--user"));
         assert!(message.contains("-e, --env <FILE>"));
         assert!(message.contains("-f, --file <FILE>"));
     }
@@ -863,6 +877,31 @@ mod tests {
         let err = Config::build_from_args(args).unwrap_err();
 
         assert_eq!(err, "Expected file path after '--env'");
+    }
+
+    #[test]
+    fn argument_user() {
+        let args = [String::from("/usr/local/bin/crn"), String::from("--user")].into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.user);
+    }
+
+    #[test]
+    fn argument_user_is_repeatable_and_continues_after_match() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--user"),
+            String::from("--user"),
+            String::from("--list-only"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert!(config.user);
+        assert!(config.list_only);
     }
 
     #[test]

@@ -157,6 +157,13 @@ pub struct CrontabSources {
 }
 
 impl CrontabSources {
+    pub fn prepend(&mut self, source: Crontab) {
+        let mut sources = Vec::with_capacity(self.sources.len() + 1);
+        sources.push(source);
+        sources.append(&mut self.sources);
+        *self = sources.into();
+    }
+
     pub fn has_runnable_jobs(&self) -> bool {
         self.sources.iter().any(Crontab::has_runnable_jobs)
     }
@@ -456,6 +463,25 @@ mod tests {
         assert_eq!(documents.len(), 2);
         assert_eq!(documents[0].jobs()[0].command, "echo first");
         assert_eq!(documents[1].jobs()[0].command, "echo second");
+    }
+
+    #[test]
+    fn prepending_a_source_reassigns_uids_without_changing_fingerprints() {
+        let user = Crontab::new(Parser::parse("@daily echo user"));
+        let file = Crontab::new(Parser::parse_with_document_id("@daily echo file", b"file"));
+        let user_fingerprint = user.jobs()[0].fingerprint;
+        let file_fingerprint = file.jobs()[0].fingerprint;
+        let mut sources = CrontabSources::from(file);
+
+        sources.prepend(user);
+
+        assert_eq!(sources.documents().len(), 2);
+        assert_eq!(sources.jobs()[0].command, "echo user");
+        assert_eq!(sources.jobs()[0].uid, 1);
+        assert_eq!(sources.jobs()[0].fingerprint, user_fingerprint);
+        assert_eq!(sources.jobs()[1].command, "echo file");
+        assert_eq!(sources.jobs()[1].uid, 2);
+        assert_eq!(sources.jobs()[1].fingerprint, file_fingerprint);
     }
 
     #[test]

@@ -44,6 +44,7 @@ Options:
       --fingerprint         Use job fingerprints.
   -t, --tag <TAG>           Run specific tag.
   -d, --detach              Run job in the background.
+      --user                Include the current user's crontab.
   -e, --env <FILE>          Override job environment.
   -f, --file <FILE>         Read jobs from a file (repeatable).
   -F, --system-file <FILE>  Read jobs from a system file (repeatable).
@@ -179,6 +180,13 @@ Variables from one crontab don't leak into the other, and job
 fingerprints remain stable even if you reorder the sources.
 
 To read a system crontab file, use `--system-file`.
+
+Passing a file replaces the default current-user source. To include the
+current user's crontab alongside file sources, pass `--user`:
+
+```console
+$ crn --user --file project.cron --list-only
+```
 
 ### System crontabs
 
