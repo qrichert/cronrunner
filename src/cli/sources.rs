@@ -56,7 +56,7 @@ impl Source {
             Self::UserCrontab(source) => Ok(vec![source.read()?]),
             Self::UserFile(source) => Ok(vec![source.read()?]),
             Self::SystemFile(source) => Ok(vec![source.read()?]),
-            Self::SystemCrontab(source) => source.read(),
+            Self::SystemCrontab(source) => Ok(source.read()),
         }
     }
 }
@@ -77,7 +77,11 @@ pub struct UserFile(PathBuf);
 
 impl UserFile {
     fn read(&self) -> Result<Read, CrontabSourcesError> {
-        Ok(Read::File(CrontabFile::read(Kind::User, &self.0)?))
+        Ok(Read::File(CrontabFile::read(
+            Kind::User,
+            &self.0,
+            FileOrigin::Explicit,
+        )?))
     }
 }
 
@@ -86,13 +90,21 @@ pub struct SystemCrontab;
 
 impl SystemCrontab {
     /// Fan out over the system crontab locations, reading each as a
-    /// system file: `--system` is just a multi-file special case that
+    /// system file: `--system` is a multi-file special case that
     /// delegates to normal file reading.
+    ///
+    /// Discovery is best-effort: cron reads these as root, but we run as
+    /// the invoking user, so a file cron honors may be unreadable here.
+    /// Skip those rather than abort, mirroring cron's own resilience.
     #[allow(clippy::unused_self)]
-    fn read(&self) -> Result<Vec<Read>, CrontabSourcesError> {
-        system_crontab_paths()?
+    fn read(&self) -> Vec<Read> {
+        system_crontab_paths()
             .iter()
-            .map(|path| Ok(Read::File(CrontabFile::read(Kind::System, path)?)))
+            .filter_map(|path| {
+                CrontabFile::read(Kind::System, path, FileOrigin::Discovered)
+                    .ok()
+                    .map(Read::File)
+            })
             .collect()
     }
 }
@@ -102,7 +114,11 @@ pub struct SystemFile(PathBuf);
 
 impl SystemFile {
     fn read(&self) -> Result<Read, CrontabSourcesError> {
-        Ok(Read::File(CrontabFile::read(Kind::System, &self.0)?))
+        Ok(Read::File(CrontabFile::read(
+            Kind::System,
+            &self.0,
+            FileOrigin::Explicit,
+        )?))
     }
 }
 
@@ -136,6 +152,18 @@ impl Read {
     }
 }
 
+/// How a file source was named.
+///
+/// The user named an [`Explicit`](FileOrigin::Explicit) file, so a read
+/// failure or a duplicate is a mistake worth reporting. `--system`
+/// [`Discovered`](FileOrigin::Discovered) it, so an unreadable or
+/// duplicate file is dropped silently, matching cron's own resilience.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum FileOrigin {
+    Explicit,
+    Discovered,
+}
+
 /// A normalized crontab file source that knows its kind.
 ///
 /// It's the counterpart of a file [`Source`] once read and validated.
@@ -143,6 +171,8 @@ impl Read {
 struct CrontabFile {
     /// Whether it's a normal crontab or a system crontab.
     kind: Kind,
+    /// Whether the user named it or `--system` discovered it.
+    origin: FileOrigin,
     /// Path as given by user, used in error messages.
     path: PathBuf,
     /// Canonicalized path, used as document identifier and for dedup.
@@ -152,7 +182,7 @@ struct CrontabFile {
 }
 
 impl CrontabFile {
-    fn read(kind: Kind, path: &Path) -> Result<Self, CrontabSourcesError> {
+    fn read(kind: Kind, path: &Path, origin: FileOrigin) -> Result<Self, CrontabSourcesError> {
         let canonical_path =
             std::fs::canonicalize(path).map_err(|source| CrontabSourcesError::FileRead {
                 path: path.to_path_buf(),
@@ -167,6 +197,7 @@ impl CrontabFile {
 
         Ok(Self {
             kind,
+            origin,
             path: path.to_path_buf(),
             canonical_path,
             contents,
@@ -199,9 +230,10 @@ const SYSTEM_CRONTAB_DIR: &str = "/etc/cron.d";
 
 /// Resolve the system crontab locations to concrete file paths.
 ///
-/// `/etc/crontab` first, then `/etc/cron.d/*` sorted for determinism. A
-/// missing `/etc/cron.d` is an empty set, not an error (e.g., macOS).
-fn system_crontab_paths() -> Result<Vec<PathBuf>, CrontabSourcesError> {
+/// `/etc/crontab` first, then `/etc/cron.d/*` sorted for determinism.
+/// Discovery is best-effort: a `/etc/cron.d` we can't list (missing on
+/// macOS, or unreadable here) contributes nothing rather than aborting.
+fn system_crontab_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     let main = PathBuf::from(SYSTEM_CRONTAB);
@@ -209,36 +241,23 @@ fn system_crontab_paths() -> Result<Vec<PathBuf>, CrontabSourcesError> {
         paths.push(main);
     }
 
-    match std::fs::read_dir(SYSTEM_CRONTAB_DIR) {
-        Ok(entries) => {
-            let entries = entries.map(|entry| entry.map(|entry| entry.path()));
-            paths.extend(system_crontab_dir_paths(entries)?);
-        }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(source) => {
-            return Err(CrontabSourcesError::FileRead {
-                path: PathBuf::from(SYSTEM_CRONTAB_DIR),
-                source,
-            });
-        }
+    if let Ok(entries) = std::fs::read_dir(SYSTEM_CRONTAB_DIR) {
+        let entries = entries.map(|entry| entry.map(|entry| entry.path()));
+        paths.extend(system_crontab_dir_paths(entries));
     }
 
-    Ok(paths)
+    paths
 }
 
-/// Collect safe `/etc/cron.d` paths without hiding iteration errors.
-fn system_crontab_dir_paths(
-    entries: impl Iterator<Item = io::Result<PathBuf>>,
-) -> Result<Vec<PathBuf>, CrontabSourcesError> {
-    let mut paths = entries.collect::<io::Result<Vec<_>>>().map_err(|source| {
-        CrontabSourcesError::FileRead {
-            path: PathBuf::from(SYSTEM_CRONTAB_DIR),
-            source,
-        }
-    })?;
+/// Collect safe `/etc/cron.d` paths, skipping unreadable entries.
+///
+/// A dirent we can't read is dropped like any other file cron wouldn't
+/// run, keeping discovery best-effort.
+fn system_crontab_dir_paths(entries: impl Iterator<Item = io::Result<PathBuf>>) -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = entries.flatten().collect();
     paths.retain(|path| is_valid_cron_d_name(path) && is_safe_system_crontab(path));
     paths.sort();
-    Ok(paths)
+    paths
 }
 
 /// Whether Cron considers an automatically discovered system crontab safe.
@@ -396,6 +415,7 @@ impl TryFrom<&[Source]> for CrontabSources {
             .flatten()
             .collect();
 
+        let reads = drop_duplicate_discovered_files(reads);
         if let Some(error) = find_duplicate_files(&reads) {
             return Err(error);
         }
@@ -420,6 +440,45 @@ fn find_duplicate_source(sources: &[Source]) -> Option<CrontabSourcesError> {
     None
 }
 
+/// Drop discovered files that duplicate another source.
+///
+/// `--system` can surface a file the user also named explicitly, or two
+/// `/etc/cron.d` symlinks pointing at one target. Those aren't user
+/// mistakes, so collapse them silently; only files named twice by the
+/// user still collide (see [`find_duplicate_files`]).
+fn drop_duplicate_discovered_files(reads: Vec<Read>) -> Vec<Read> {
+    let explicit_paths: Vec<PathBuf> = reads
+        .iter()
+        .filter_map(Read::as_file)
+        .filter(|file| file.origin == FileOrigin::Explicit)
+        .map(|file| file.canonical_path.clone())
+        .collect();
+
+    let mut kept_discovered: Vec<PathBuf> = Vec::new();
+    reads
+        .into_iter()
+        .filter(|read| {
+            let Some(file) = read.as_file() else {
+                return true; // The live crontab has no path to dedup.
+            };
+            if file.origin == FileOrigin::Explicit {
+                return true; // Explicit duplicates surface as an error.
+            }
+            let is_duplicate = explicit_paths.contains(&file.canonical_path)
+                || kept_discovered.contains(&file.canonical_path);
+            if is_duplicate {
+                return false;
+            }
+            kept_discovered.push(file.canonical_path.clone());
+            true
+        })
+        .collect()
+}
+
+/// Reject a document the user supplied more than once.
+///
+/// Discovered duplicates are already gone, so any match here is a file
+/// the user named twice.
 fn find_duplicate_files(reads: &[Read]) -> Option<CrontabSourcesError> {
     let files: Vec<&CrontabFile> = reads.iter().filter_map(Read::as_file).collect();
     for (index, file) in files.iter().enumerate() {
@@ -434,15 +493,6 @@ fn find_duplicate_files(reads: &[Read]) -> Option<CrontabSourcesError> {
         }
     }
     None
-}
-
-impl From<Crontab> for CrontabSources {
-    /// Create an instance from a single [`Crontab`] entry.
-    fn from(crontab: Crontab) -> Self {
-        Self {
-            sources: vec![crontab],
-        }
-    }
 }
 
 impl From<Vec<Crontab>> for CrontabSources {
@@ -493,7 +543,6 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use cronrunner::parser::{Kind, Parser};
-    use cronrunner::tokens::{CronJob, JobSection};
 
     use super::*;
 
@@ -509,16 +558,14 @@ mod tests {
     }
 
     #[test]
-    fn system_crontab_directory_entry_errors_are_propagated() {
+    fn system_crontab_directory_entry_errors_are_skipped() {
+        // Discovery is best-effort: an unreadable dirent is dropped, not
+        // fatal, so a broken entry can't sink the whole `--system` run.
         let entries = [Err(io::Error::other("directory entry failed"))].into_iter();
 
-        let error = system_crontab_dir_paths(entries).unwrap_err();
+        let paths = system_crontab_dir_paths(entries);
 
-        let CrontabSourcesError::FileRead { path, source } = error else {
-            panic!()
-        };
-        assert_eq!(path, PathBuf::from(SYSTEM_CRONTAB_DIR));
-        assert_eq!(source.kind(), io::ErrorKind::Other);
+        assert!(paths.is_empty());
     }
 
     #[test]
@@ -533,7 +580,9 @@ mod tests {
         std::fs::set_permissions(&writable, permissions).unwrap();
 
         assert!(!is_safe_system_crontab(&writable));
-        assert!(SystemFile(writable).read().is_ok());
+        assert!(SystemFile(writable.clone()).read().is_ok());
+
+        std::fs::remove_file(&writable).unwrap();
     }
 
     #[test]
@@ -551,7 +600,7 @@ mod tests {
 
         let files: Vec<CrontabFile> = [relative, absolute.clone(), symlink]
             .iter()
-            .map(|path| CrontabFile::read(Kind::User, path).unwrap())
+            .map(|path| CrontabFile::read(Kind::User, path, FileOrigin::Explicit).unwrap())
             .collect();
 
         assert_eq!(files[0].canonical_path, absolute);
@@ -565,12 +614,14 @@ mod tests {
         let reads = [
             Read::File(CrontabFile {
                 kind: Kind::User,
+                origin: FileOrigin::Explicit,
                 path: PathBuf::from("example.cron"),
                 canonical_path: canonical_path.clone(),
                 contents: String::new(),
             }),
             Read::File(CrontabFile {
                 kind: Kind::User,
+                origin: FileOrigin::Explicit,
                 path: PathBuf::from("./example.cron"),
                 canonical_path,
                 contents: String::new(),
@@ -596,12 +647,14 @@ mod tests {
         let reads = [
             Read::File(CrontabFile {
                 kind: Kind::User,
+                origin: FileOrigin::Explicit,
                 path: PathBuf::from("first.cron"),
                 canonical_path: PathBuf::from("/tmp/first.cron"),
                 contents: String::new(),
             }),
             Read::File(CrontabFile {
                 kind: Kind::User,
+                origin: FileOrigin::Explicit,
                 path: PathBuf::from("second.cron"),
                 canonical_path: PathBuf::from("/tmp/second.cron"),
                 contents: String::new(),
@@ -611,12 +664,71 @@ mod tests {
         assert!(find_duplicate_files(&reads).is_none());
     }
 
+    fn file_read(origin: FileOrigin, path: &str, canonical: &str) -> Read {
+        Read::File(CrontabFile {
+            kind: Kind::System,
+            origin,
+            path: PathBuf::from(path),
+            canonical_path: PathBuf::from(canonical),
+            contents: String::new(),
+        })
+    }
+
+    #[test]
+    fn discovered_files_duplicating_another_source_are_dropped_silently() {
+        let reads = vec![
+            file_read(FileOrigin::Explicit, "explicit.cron", "/tmp/shared.cron"),
+            file_read(FileOrigin::Discovered, "/etc/cron.d/link", "/tmp/shared.cron"),
+            file_read(FileOrigin::Discovered, "/etc/cron.d/copy", "/tmp/shared.cron"),
+        ];
+
+        let kept = drop_duplicate_discovered_files(reads);
+
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].as_file().unwrap().origin, FileOrigin::Explicit);
+        assert!(find_duplicate_files(&kept).is_none());
+    }
+
+    #[test]
+    fn duplicate_discovered_files_collapse_to_one() {
+        let reads = vec![
+            file_read(FileOrigin::Discovered, "/etc/cron.d/a", "/tmp/x.cron"),
+            file_read(FileOrigin::Discovered, "/etc/cron.d/b", "/tmp/x.cron"),
+        ];
+
+        let kept = drop_duplicate_discovered_files(reads);
+
+        assert_eq!(kept.len(), 1);
+    }
+
+    #[test]
+    fn duplicate_explicit_files_survive_dropping_and_still_error() {
+        let reads = vec![
+            file_read(FileOrigin::Explicit, "a.cron", "/tmp/same.cron"),
+            file_read(FileOrigin::Explicit, "./a.cron", "/tmp/same.cron"),
+        ];
+
+        let kept = drop_duplicate_discovered_files(reads);
+
+        assert_eq!(kept.len(), 2);
+        assert!(find_duplicate_files(&kept).is_some());
+    }
+
+    #[test]
+    fn live_reads_are_never_dropped_as_duplicates() {
+        let reads = vec![Read::Live(String::new()), Read::Live(String::new())];
+
+        let kept = drop_duplicate_discovered_files(reads);
+
+        assert_eq!(kept.len(), 2);
+    }
+
     #[test]
     fn file_read_error_retains_path_and_io_error() {
         let missing = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target/tmp/sources_tests/does-not-exist.cron");
 
-        let error = CrontabFile::read(Kind::User, &missing).unwrap_err();
+        let error = CrontabFile::read(Kind::User, &missing, FileOrigin::Explicit).unwrap_err();
 
         let CrontabSourcesError::FileRead { path, source } = &error else {
             panic!()
@@ -655,36 +767,13 @@ mod tests {
         let invalid = temporary_directory.join("invalid-utf8.cron");
         std::fs::write(&invalid, [0xff]).unwrap();
 
-        let error = CrontabFile::read(Kind::User, &invalid).unwrap_err();
+        let error = CrontabFile::read(Kind::User, &invalid, FileOrigin::Explicit).unwrap_err();
 
         let CrontabSourcesError::FileRead { path, source } = error else {
             panic!()
         };
         assert_eq!(path, invalid);
         assert_eq!(source.kind(), io::ErrorKind::InvalidData);
-    }
-
-    #[test]
-    fn live_crontab_metadata_is_not_normalized() {
-        let crontab = Crontab::new(vec![Token::CronJob(CronJob {
-            uid: 42,
-            fingerprint: 13_376_942,
-            tag: None,
-            schedule: String::from("@daily"),
-            user: None,
-            command: String::from(":"),
-            description: None,
-            section: Some(JobSection {
-                uid: 7,
-                title: String::from("Section"),
-            }),
-        })]);
-
-        let sources = CrontabSources::from(crontab);
-        let job = sources.jobs()[0];
-
-        assert_eq!(job.uid, 42);
-        assert_eq!(job.section.as_ref().unwrap().uid, 7);
     }
 
     #[test]
