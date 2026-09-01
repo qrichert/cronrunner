@@ -184,8 +184,10 @@ Options:
   -t, --tag <TAG>           Run specific tag.
   -d, --detach              Run job in the background.
   -e, --env <FILE>          Override job environment.
-  -f, --file <FILE>         Read jobs from a file (repeatable).
-  -F, --system-file <FILE>  Read jobs from a system file (repeatable).
+      --user                Add the current user's crontab.
+      --system              Add Cron's system crontabs.
+  -f, --file <FILE>         Add jobs from a file (repeatable).
+  -F, --system-file <FILE>  Add jobs from a system file (repeatable).
 
   -h, --help                Show this message and exit.
   -V, --version             Show the version and exit.
@@ -291,9 +293,12 @@ Environment:
       {highlight}${reset} {bin} --env ~/.cron.env 3
       Running...
 
-Crontab source:
-  By default, jobs are read from the current user's crontab through
-  `crontab -l`. To read it from an arbitrary file, pass `--file`:
+Crontab sources:
+  Source options are additive and may be combined. With no source option,
+  jobs are read from the current user's crontab through `crontab -l`. Use
+  `--user` to include it explicitly when combining it with other sources.
+
+  To read a user crontab from an arbitrary file, pass `--file`:
 
       {highlight}${reset} {bin} --file ./crontab.export --list-only
       {highlight}${reset} {bin} -f personal.cron -f project.cron
@@ -302,7 +307,8 @@ Crontab source:
   Variables from one crontab don't leak into the other, and job
   fingerprints remain stable even if you reorder the sources.
 
-  To read a system crontab file, use `--system-file`.
+  Use `--system` to include `/etc/crontab` and valid files under
+  `/etc/cron.d`, or `--system-file` to read an explicit system crontab file.
 
 System crontabs:
   System crontabs typically live in `/etc/cron.d/*` and have an
@@ -462,7 +468,10 @@ mod tests {
         assert!(message.contains("-t, --tag"));
         assert!(message.contains("-d, --detach"));
         assert!(message.contains("-e, --env <FILE>"));
+        assert!(message.contains("--user"));
+        assert!(message.contains("--system"));
         assert!(message.contains("-f, --file <FILE>"));
+        assert!(message.contains("-F, --system-file <FILE>"));
     }
 
     #[test]
@@ -506,6 +515,9 @@ mod tests {
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains("-h, --help"));
         assert!(message.contains("-V, --version"));
+        assert!(message.contains("Source options are additive and may be combined."));
+        assert!(message.contains("`--user` to include it explicitly"));
+        assert!(message.contains("Use `--system` to include `/etc/crontab`"));
     }
 
     #[test]

@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use cronrunner::crontab::Crontab;
@@ -204,19 +205,14 @@ fn system_crontab_paths() -> Result<Vec<PathBuf>, CrontabSourcesError> {
     let mut paths = Vec::new();
 
     let main = PathBuf::from(SYSTEM_CRONTAB);
-    if main.is_file() {
+    if is_safe_system_crontab(&main) {
         paths.push(main);
     }
 
     match std::fs::read_dir(SYSTEM_CRONTAB_DIR) {
         Ok(entries) => {
-            let mut dir_paths: Vec<PathBuf> = entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| path.is_file() && is_valid_cron_d_name(path))
-                .collect();
-            dir_paths.sort();
-            paths.extend(dir_paths);
+            let entries = entries.map(|entry| entry.map(|entry| entry.path()));
+            paths.extend(system_crontab_dir_paths(entries)?);
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(source) => {
@@ -228,6 +224,54 @@ fn system_crontab_paths() -> Result<Vec<PathBuf>, CrontabSourcesError> {
     }
 
     Ok(paths)
+}
+
+/// Collect safe `/etc/cron.d` paths without hiding iteration errors.
+fn system_crontab_dir_paths(
+    entries: impl Iterator<Item = io::Result<PathBuf>>,
+) -> Result<Vec<PathBuf>, CrontabSourcesError> {
+    let mut paths = entries.collect::<io::Result<Vec<_>>>().map_err(|source| {
+        CrontabSourcesError::FileRead {
+            path: PathBuf::from(SYSTEM_CRONTAB_DIR),
+            source,
+        }
+    })?;
+    paths.retain(|path| is_valid_cron_d_name(path) && is_safe_system_crontab(path));
+    paths.sort();
+    Ok(paths)
+}
+
+/// Whether Cron considers an automatically discovered system crontab safe.
+///
+/// Cron excludes files that are not root-owned, are group- or other-writable,
+/// or are symlinks not owned by root or not targeting a root-owned file. Mirror
+/// those exclusions so `--system` cannot execute configuration Cron ignores.
+/// These path checks are not atomic with the later read. That race is accepted
+/// here because this mirrors Cron's discovery policy; closing it would require
+/// opening, validating, and reading the same file descriptor.
+fn is_safe_system_crontab(path: &Path) -> bool {
+    let Ok(path_metadata) = std::fs::symlink_metadata(path) else {
+        return false;
+    };
+    let Ok(target_metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+
+    has_safe_system_crontab_metadata(
+        path_metadata.uid(),
+        target_metadata.uid(),
+        target_metadata.mode(),
+        target_metadata.is_file(),
+    )
+}
+
+fn has_safe_system_crontab_metadata(
+    path_owner: u32,
+    target_owner: u32,
+    target_mode: u32,
+    target_is_file: bool,
+) -> bool {
+    path_owner == 0 && target_owner == 0 && target_mode & 0o022 == 0 && target_is_file
 }
 
 /// Whether cron would pick up this `/etc/cron.d` entry.
@@ -446,11 +490,51 @@ impl From<Vec<Crontab>> for CrontabSources {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::os::unix::fs::PermissionsExt;
 
     use cronrunner::parser::{Kind, Parser};
     use cronrunner::tokens::{CronJob, JobSection};
 
     use super::*;
+
+    #[test]
+    fn automatic_system_sources_follow_cron_metadata_exclusions() {
+        // Separate path and target owners model Cron's symlink rule.
+        assert!(has_safe_system_crontab_metadata(0, 0, 0o600, true));
+        assert!(!has_safe_system_crontab_metadata(1_000, 0, 0o600, true));
+        assert!(!has_safe_system_crontab_metadata(0, 1_000, 0o600, true));
+        assert!(!has_safe_system_crontab_metadata(0, 0, 0o620, true));
+        assert!(!has_safe_system_crontab_metadata(0, 0, 0o602, true));
+        assert!(!has_safe_system_crontab_metadata(0, 0, 0o600, false));
+    }
+
+    #[test]
+    fn system_crontab_directory_entry_errors_are_propagated() {
+        let entries = [Err(io::Error::other("directory entry failed"))].into_iter();
+
+        let error = system_crontab_dir_paths(entries).unwrap_err();
+
+        let CrontabSourcesError::FileRead { path, source } = error else {
+            panic!()
+        };
+        assert_eq!(path, PathBuf::from(SYSTEM_CRONTAB_DIR));
+        assert_eq!(source.kind(), io::ErrorKind::Other);
+    }
+
+    #[test]
+    fn explicit_system_files_bypass_cron_discovery_exclusions() {
+        let temporary_directory =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/tmp/sources_tests");
+        std::fs::create_dir_all(&temporary_directory).unwrap();
+        let writable = temporary_directory.join("explicit-writable-system.cron");
+        std::fs::write(&writable, "@daily root :\n").unwrap();
+        let mut permissions = std::fs::metadata(&writable).unwrap().permissions();
+        permissions.set_mode(0o666);
+        std::fs::set_permissions(&writable, permissions).unwrap();
+
+        assert!(!is_safe_system_crontab(&writable));
+        assert!(SystemFile(writable).read().is_ok());
+    }
 
     #[test]
     fn file_paths_are_canonicalized() {
