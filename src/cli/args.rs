@@ -1003,11 +1003,13 @@ mod tests {
     }
 
     #[test]
-    fn arguments_file_and_system_file_interleave_preserving_order() {
+    fn source_arguments_interleave_preserving_order() {
         let args = [
             String::from("/usr/local/bin/crn"),
+            String::from("--system"),
             String::from("-f"),
             String::from("personal.cron"),
+            String::from("--user"),
             String::from("-F"),
             String::from("/etc/cron.d/system"),
             String::from("--file"),
@@ -1020,7 +1022,9 @@ mod tests {
         assert_eq!(
             config.crontab_sources,
             [
+                Source::from_system_crontab(),
                 Source::from_user_file(PathBuf::from("personal.cron")),
+                Source::from_user_crontab(),
                 Source::from_system_file(PathBuf::from("/etc/cron.d/system")),
                 Source::from_user_file(PathBuf::from("project.cron")),
             ]

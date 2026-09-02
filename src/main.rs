@@ -1171,6 +1171,22 @@ mod tests {
     }
 
     #[test]
+    fn exit_from_crontab_sources_live_read_error_forwards_the_exit_status() {
+        let error = CrontabSourcesError::LiveRead(ReadError {
+            reason: "Could not read the live crontab.",
+            detail: ReadErrorDetail::NonZeroExit {
+                exit_code: Some(42),
+                stderr: None,
+            },
+        });
+
+        assert_eq!(
+            exit_from_crontab_sources_error(&error),
+            ExitStatus::Code(42)
+        );
+    }
+
+    #[test]
     fn exit_from_crontab_sources_file_read_error_is_failure() {
         let error = CrontabSourcesError::FileRead {
             path: PathBuf::from("missing.cron"),
