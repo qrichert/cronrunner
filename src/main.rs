@@ -117,7 +117,9 @@ fn exit_from_crontab_sources_error(error: &CrontabSourcesError) -> ExitStatus {
             eprintln!("{label}: {error}.", label = ui::Color::error("error"));
             ExitStatus::Failure
         }
-        CrontabSourcesError::DuplicateFile { .. } | CrontabSourcesError::DuplicateSource { .. } => {
+        CrontabSourcesError::DuplicateFile { .. }
+        | CrontabSourcesError::DuplicateSource { .. }
+        | CrontabSourcesError::ConflictingSources { .. } => {
             exit_from_arguments_error(&error.to_string())
         }
     }
@@ -1201,6 +1203,19 @@ mod tests {
         let error = CrontabSourcesError::DuplicateFile {
             path: PathBuf::from("./example.cron"),
             first_path: PathBuf::from("example.cron"),
+        };
+
+        assert_eq!(
+            exit_from_crontab_sources_error(&error),
+            ExitStatus::ArgsError
+        );
+    }
+
+    #[test]
+    fn exit_from_conflicting_crontab_sources_error_is_arguments_error() {
+        let error = CrontabSourcesError::ConflictingSources {
+            first_name: "--system",
+            second_name: "--system-lsb",
         };
 
         assert_eq!(

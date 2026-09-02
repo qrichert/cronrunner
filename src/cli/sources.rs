@@ -41,6 +41,11 @@ impl Source {
         Self::SystemCrontab(SystemCrontab::standard())
     }
 
+    /// The system crontabs using Cron's LSB filename rules.
+    pub fn from_lsb_system_crontab() -> Self {
+        Self::SystemCrontab(SystemCrontab::lsb())
+    }
+
     /// A system crontab read from a file (`-F`/`--system-file`).
     pub fn from_system_file(path: PathBuf) -> Self {
         Self::SystemFile(SystemFile(path))
@@ -85,17 +90,40 @@ impl UserFile {
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum CronDNameMode {
+    Default,
+    Lsb,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct SystemCrontab {
     main: PathBuf,
     directory: PathBuf,
+    name_mode: CronDNameMode,
 }
 
 impl SystemCrontab {
     fn standard() -> Self {
+        Self::with_name_mode(CronDNameMode::Default)
+    }
+
+    fn lsb() -> Self {
+        Self::with_name_mode(CronDNameMode::Lsb)
+    }
+
+    fn with_name_mode(name_mode: CronDNameMode) -> Self {
         Self {
             main: PathBuf::from(SYSTEM_CRONTAB),
             directory: PathBuf::from(SYSTEM_CRONTAB_DIR),
+            name_mode,
+        }
+    }
+
+    fn argument_name(&self) -> &'static str {
+        match self.name_mode {
+            CronDNameMode::Default => "--system",
+            CronDNameMode::Lsb => "--system-lsb",
         }
     }
 
@@ -107,7 +135,12 @@ impl SystemCrontab {
     /// the invoking user, so a file cron honors may be unreadable here.
     /// Skip those rather than abort, mirroring cron's own resilience.
     fn read(&self) -> Vec<Read> {
-        let paths = system_crontab_paths(&self.main, &self.directory, is_safe_system_crontab);
+        let paths = system_crontab_paths(
+            &self.main,
+            &self.directory,
+            self.name_mode,
+            is_safe_system_crontab,
+        );
         read_system_crontab_files(&paths)
     }
 }
@@ -250,6 +283,7 @@ const SYSTEM_CRONTAB_DIR: &str = "/etc/cron.d";
 fn system_crontab_paths(
     main: &Path,
     directory: &Path,
+    name_mode: CronDNameMode,
     is_safe: impl Fn(&Path) -> bool,
 ) -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -260,7 +294,7 @@ fn system_crontab_paths(
 
     if let Ok(entries) = std::fs::read_dir(directory) {
         let entries = entries.map(|entry| entry.map(|entry| entry.path()));
-        paths.extend(system_crontab_dir_paths(entries, is_safe));
+        paths.extend(system_crontab_dir_paths(entries, name_mode, is_safe));
     }
 
     paths
@@ -272,10 +306,11 @@ fn system_crontab_paths(
 /// run, keeping discovery best-effort.
 fn system_crontab_dir_paths(
     entries: impl Iterator<Item = io::Result<PathBuf>>,
+    name_mode: CronDNameMode,
     is_safe: impl Fn(&Path) -> bool,
 ) -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = entries.flatten().collect();
-    paths.retain(|path| is_valid_cron_d_name(path) && is_safe(path));
+    paths.retain(|path| is_valid_cron_d_name(path, name_mode) && is_safe(path));
     paths.sort();
     paths
 }
@@ -313,27 +348,91 @@ fn has_safe_system_crontab_metadata(
     path_owner == 0 && target_owner == 0 && target_mode & 0o022 == 0 && target_is_file
 }
 
-/// Whether cron would pick up this `/etc/cron.d` entry.
+/// Whether Cron would pick up this `/etc/cron.d` entry in the selected mode.
 ///
-/// `run-parts` ignores names outside `[A-Za-z0-9_-]`, which skips
-/// dotfiles, `.dpkg-dist`, editor backups, and the like.
-fn is_valid_cron_d_name(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| {
-            !name.is_empty()
-                && name
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+/// Cron chooses one of two filename predicates when the daemon starts. LSB
+/// mode is not additive: it accepts hierarchical dotted names but rejects some
+/// names accepted by the default mode. Keep the choice explicit so discovery
+/// neither omits active jobs nor exposes jobs Cron itself ignores.
+fn is_valid_cron_d_name(path: &Path, mode: CronDNameMode) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+
+    match mode {
+        CronDNameMode::Default => is_valid_default_cron_d_name(name),
+        CronDNameMode::Lsb => is_valid_lsb_cron_d_name(name),
+    }
+}
+
+fn is_valid_default_cron_d_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+fn is_valid_lsb_cron_d_name(name: &str) -> bool {
+    if is_lsb_hierarchical_cron_d_name(name) {
+        return !is_lsb_package_manager_name(name);
+    }
+
+    let Some((first, remaining)) = name.as_bytes().split_first() else {
+        return false;
+    };
+    (first.is_ascii_lowercase() || first.is_ascii_digit())
+        && remaining
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
+}
+
+fn is_lsb_hierarchical_cron_d_name(name: &str) -> bool {
+    let name = name.strip_prefix('_').unwrap_or(name);
+    let Some((namespace, leaf)) = name.rsplit_once('-') else {
+        return false;
+    };
+
+    !namespace.is_empty()
+        && namespace.split('-').all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|byte| {
+                    byte.is_ascii_lowercase()
+                        || byte.is_ascii_digit()
+                        || byte == b'_'
+                        || byte == b'.'
+                })
         })
+        && !leaf.is_empty()
+        && leaf
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+}
+
+fn is_lsb_package_manager_name(name: &str) -> bool {
+    name.as_bytes()
+        .first()
+        .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
+        && (name.ends_with("dpkg-old") || name.ends_with("dpkg-dist"))
 }
 
 #[derive(Debug)]
 pub enum CrontabSourcesError {
     LiveRead(ReadError),
-    FileRead { path: PathBuf, source: io::Error },
-    DuplicateFile { path: PathBuf, first_path: PathBuf },
-    DuplicateSource { name: &'static str },
+    FileRead {
+        path: PathBuf,
+        source: io::Error,
+    },
+    DuplicateFile {
+        path: PathBuf,
+        first_path: PathBuf,
+    },
+    DuplicateSource {
+        name: &'static str,
+    },
+    ConflictingSources {
+        first_name: &'static str,
+        second_name: &'static str,
+    },
 }
 
 impl fmt::Display for CrontabSourcesError {
@@ -352,6 +451,10 @@ impl fmt::Display for CrontabSourcesError {
             Self::DuplicateSource { name } => {
                 write!(f, "'{name}' is given more than once")
             }
+            Self::ConflictingSources {
+                first_name,
+                second_name,
+            } => write!(f, "'{first_name}' and '{second_name}' cannot be combined"),
         }
     }
 }
@@ -361,7 +464,9 @@ impl Error for CrontabSourcesError {
         match self {
             Self::LiveRead(source) => Some(source),
             Self::FileRead { source, .. } => Some(source),
-            Self::DuplicateFile { .. } | Self::DuplicateSource { .. } => None,
+            Self::DuplicateFile { .. }
+            | Self::DuplicateSource { .. }
+            | Self::ConflictingSources { .. } => None,
         }
     }
 }
@@ -445,16 +550,34 @@ impl TryFrom<&[Source]> for CrontabSources {
     }
 }
 
-/// Reject a non-file source (`--user`/`--system`) given more than once.
+/// Reject duplicate live sources and incompatible system filename modes.
 fn find_duplicate_source(sources: &[Source]) -> Option<CrontabSourcesError> {
     for (index, source) in sources.iter().enumerate() {
-        let name = match source {
-            Source::UserCrontab(_) => "--user",
-            Source::SystemCrontab(_) => "--system",
-            Source::UserFile(_) | Source::SystemFile(_) => continue,
-        };
-        if sources[..index].contains(source) {
-            return Some(CrontabSourcesError::DuplicateSource { name });
+        match source {
+            Source::UserCrontab(_) if sources[..index].contains(source) => {
+                return Some(CrontabSourcesError::DuplicateSource { name: "--user" });
+            }
+            Source::SystemCrontab(system) => {
+                let previous = sources[..index].iter().find_map(|source| {
+                    if let Source::SystemCrontab(system) = source {
+                        Some(system)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(previous) = previous {
+                    if previous == system {
+                        return Some(CrontabSourcesError::DuplicateSource {
+                            name: system.argument_name(),
+                        });
+                    }
+                    return Some(CrontabSourcesError::ConflictingSources {
+                        first_name: previous.argument_name(),
+                        second_name: system.argument_name(),
+                    });
+                }
+            }
+            Source::UserCrontab(_) | Source::UserFile(_) | Source::SystemFile(_) => {}
         }
     }
     None
@@ -580,6 +703,7 @@ mod tests {
         let source = Source::SystemCrontab(SystemCrontab {
             main: temporary_directory.join("crontab"),
             directory: temporary_directory.join("cron.d"),
+            name_mode: CronDNameMode::Default,
         });
 
         let reads = source.read().unwrap();
@@ -610,7 +734,7 @@ mod tests {
     }
 
     #[test]
-    fn system_crontab_discovery_filters_and_sorts_drop_ins() {
+    fn system_crontab_discovery_applies_selected_name_mode_and_sorts() {
         let temporary_directory = temporary_test_directory("system-discovery");
         let main = temporary_directory.join("crontab");
         let directory = temporary_directory.join("cron.d");
@@ -618,10 +742,12 @@ mod tests {
         std::fs::write(&main, "").unwrap();
         let first = directory.join("a");
         let second = directory.join("b_2-test");
+        let lsb_hierarchical = directory.join("foo.bar-baz");
         let unsafe_file = directory.join("c");
         for path in [
             &second,
             &first,
+            &lsb_hierarchical,
             &unsafe_file,
             &directory.join(".hidden"),
             &directory.join("ignored.cron"),
@@ -630,11 +756,16 @@ mod tests {
             std::fs::write(path, "").unwrap();
         }
 
-        let paths = system_crontab_paths(&main, &directory, |path| {
+        let default_paths =
+            system_crontab_paths(&main, &directory, CronDNameMode::Default, |path| {
+                path.is_file() && path != unsafe_file
+            });
+        let lsb_paths = system_crontab_paths(&main, &directory, CronDNameMode::Lsb, |path| {
             path.is_file() && path != unsafe_file
         });
 
-        assert_eq!(paths, [main, first, second]);
+        assert_eq!(default_paths, [main.clone(), first.clone(), second.clone()]);
+        assert_eq!(lsb_paths, [main, first, second, lsb_hierarchical]);
         std::fs::remove_dir_all(temporary_directory).unwrap();
     }
 
@@ -651,16 +782,51 @@ mod tests {
     }
 
     #[test]
-    fn cron_drop_in_names_follow_run_parts_rules() {
+    fn cron_drop_in_names_follow_default_rules() {
         for valid in ["a", "ABC_123-test"] {
-            assert!(is_valid_cron_d_name(Path::new(valid)), "{valid}");
+            assert!(
+                is_valid_cron_d_name(Path::new(valid), CronDNameMode::Default),
+                "{valid}"
+            );
         }
         for invalid in ["", ".hidden", "ignored.cron", "backup~"] {
-            assert!(!is_valid_cron_d_name(Path::new(invalid)), "{invalid}");
+            assert!(
+                !is_valid_cron_d_name(Path::new(invalid), CronDNameMode::Default),
+                "{invalid}"
+            );
         }
-        assert!(!is_valid_cron_d_name(Path::new(OsStr::from_bytes(
-            b"invalid-\xff"
-        ))));
+        assert!(!is_valid_cron_d_name(
+            Path::new(OsStr::from_bytes(b"invalid-\xff")),
+            CronDNameMode::Default
+        ));
+    }
+
+    #[test]
+    fn cron_drop_in_names_follow_lsb_rules() {
+        for valid in ["a", "foo-bar", "foo.bar-baz", "_foo.bar-baz"] {
+            assert!(
+                is_valid_cron_d_name(Path::new(valid), CronDNameMode::Lsb),
+                "{valid}"
+            );
+        }
+        for invalid in [
+            "",
+            "ABC_123-test",
+            "foo_bar",
+            "foo.bar",
+            "foo.bar-baz.dpkg-old",
+            "foo.bar-baz.dpkg-dist",
+            "backup~",
+        ] {
+            assert!(
+                !is_valid_cron_d_name(Path::new(invalid), CronDNameMode::Lsb),
+                "{invalid}"
+            );
+        }
+        assert!(!is_valid_cron_d_name(
+            Path::new(OsStr::from_bytes(b"invalid-\xff")),
+            CronDNameMode::Lsb
+        ));
     }
 
     #[test]
@@ -681,6 +847,24 @@ mod tests {
         );
         assert!(user_error.source().is_none());
         assert!(system_error.source().is_none());
+    }
+
+    #[test]
+    fn default_and_lsb_system_sources_cannot_be_combined() {
+        let error = CrontabSources::try_from(
+            [
+                Source::from_system_crontab(),
+                Source::from_lsb_system_crontab(),
+            ]
+            .as_slice(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "'--system' and '--system-lsb' cannot be combined"
+        );
+        assert!(error.source().is_none());
     }
 
     #[test]
@@ -722,7 +906,7 @@ mod tests {
         // fatal, so a broken entry can't sink the whole `--system` run.
         let entries = std::iter::once(Err(io::Error::other("directory entry failed")));
 
-        let paths = system_crontab_dir_paths(entries, |_| true);
+        let paths = system_crontab_dir_paths(entries, CronDNameMode::Default, |_| true);
 
         assert!(paths.is_empty());
     }

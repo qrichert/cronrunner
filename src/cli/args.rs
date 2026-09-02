@@ -118,6 +118,13 @@ impl Config {
                 continue;
             }
 
+            if arg == "--system-lsb" {
+                config
+                    .crontab_sources
+                    .push(Source::from_lsb_system_crontab());
+                continue;
+            }
+
             if config.tag {
                 config.job = Some(Job::Tag(arg));
                 break;
@@ -186,6 +193,7 @@ Options:
   -e, --env <FILE>          Override job environment.
       --user                Add the current user's crontab.
       --system              Add Cron's system crontabs.
+      --system-lsb          Add system crontabs using Cron's `-l` names.
   -f, --file <FILE>         Add jobs from a file (repeatable).
   -F, --system-file <FILE>  Add jobs from a system file (repeatable).
 
@@ -307,8 +315,10 @@ Crontab sources:
   Variables from one crontab don't leak into the other, and job
   fingerprints remain stable even if you reorder the sources.
 
-  Use `--system` to include `/etc/crontab` and valid files under
-  `/etc/cron.d`, or `--system-file` to read an explicit system crontab file.
+  Use `--system` to include `/etc/crontab` and files under `/etc/cron.d`
+  that follow Cron's default naming rules. If Cron runs with `-l`, use
+  `--system-lsb` instead to apply its LSB naming rules. Use `--system-file`
+  to read an explicit system crontab file.
 
 System crontabs:
   System crontabs typically live in `/etc/cron.d/*` and have an
@@ -470,6 +480,7 @@ mod tests {
         assert!(message.contains("-e, --env <FILE>"));
         assert!(message.contains("--user"));
         assert!(message.contains("--system"));
+        assert!(message.contains("--system-lsb"));
         assert!(message.contains("-f, --file <FILE>"));
         assert!(message.contains("-F, --system-file <FILE>"));
     }
@@ -518,6 +529,8 @@ mod tests {
         assert!(message.contains("Source options are additive and may be combined."));
         assert!(message.contains("`--user` to include it explicitly"));
         assert!(message.contains("Use `--system` to include `/etc/crontab`"));
+        assert!(message.contains("If Cron runs with `-l`, use"));
+        assert!(message.contains("`--system-lsb` instead"));
     }
 
     #[test]
@@ -1000,6 +1013,19 @@ mod tests {
         let err = Config::build_from_args(args).unwrap_err();
 
         assert_eq!(err, "Expected file path after '-F'");
+    }
+
+    #[test]
+    fn argument_lsb_system_crontab() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--system-lsb"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert_eq!(config.crontab_sources, [Source::from_lsb_system_crontab()]);
     }
 
     #[test]

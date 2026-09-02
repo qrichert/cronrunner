@@ -47,6 +47,7 @@ Options:
   -e, --env <FILE>          Override job environment.
       --user                Add the current user's crontab.
       --system              Add Cron's system crontabs.
+      --system-lsb          Add system crontabs using Cron's `-l` names.
   -f, --file <FILE>         Add jobs from a file (repeatable).
   -F, --system-file <FILE>  Add jobs from a system file (repeatable).
 
@@ -183,8 +184,10 @@ If you pass multiple file sources, they are read and run in isolation.
 Variables from one crontab don't leak into the other, and job
 fingerprints remain stable even if you reorder the sources.
 
-Use `--system` to include `/etc/crontab` and valid files under
-`/etc/cron.d`, or `--system-file` to read an explicit system crontab file.
+Use `--system` to include `/etc/crontab` and files under `/etc/cron.d`
+that follow Cron's default naming rules. If Cron runs with `-l`, use
+`--system-lsb` instead to apply its LSB naming rules. Use `--system-file`
+to read an explicit system crontab file.
 
 ### System crontabs
 
