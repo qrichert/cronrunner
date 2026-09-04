@@ -318,8 +318,9 @@ fn system_crontab_dir_paths(
 /// Whether Cron considers an automatically discovered system crontab safe.
 ///
 /// Cron excludes files that are not root-owned, are group- or other-writable,
-/// or are symlinks not owned by root or not targeting a root-owned file. Mirror
-/// those exclusions so `--system` cannot execute configuration Cron ignores.
+/// have multiple hard links, or are symlinks not owned by root or not targeting
+/// a root-owned file. Mirror those exclusions so `--system` cannot execute
+/// configuration Cron ignores.
 /// These path checks are not atomic with the later read. That race is accepted
 /// here because this mirrors Cron's discovery policy; closing it would require
 /// opening, validating, and reading the same file descriptor.
@@ -335,6 +336,7 @@ fn is_safe_system_crontab(path: &Path) -> bool {
         path_metadata.uid(),
         target_metadata.uid(),
         target_metadata.mode(),
+        target_metadata.nlink(),
         target_metadata.is_file(),
     )
 }
@@ -343,9 +345,14 @@ fn has_safe_system_crontab_metadata(
     path_owner: u32,
     target_owner: u32,
     target_mode: u32,
+    target_link_count: u64,
     target_is_file: bool,
 ) -> bool {
-    path_owner == 0 && target_owner == 0 && target_mode & 0o022 == 0 && target_is_file
+    path_owner == 0
+        && target_owner == 0
+        && target_mode & 0o022 == 0
+        && target_link_count == 1
+        && target_is_file
 }
 
 /// Whether Cron would pick up this `/etc/cron.d` entry in the selected mode.
@@ -897,12 +904,13 @@ mod tests {
     #[test]
     fn automatic_system_sources_follow_cron_metadata_exclusions() {
         // Separate path and target owners model Cron's symlink rule.
-        assert!(has_safe_system_crontab_metadata(0, 0, 0o600, true));
-        assert!(!has_safe_system_crontab_metadata(1_000, 0, 0o600, true));
-        assert!(!has_safe_system_crontab_metadata(0, 1_000, 0o600, true));
-        assert!(!has_safe_system_crontab_metadata(0, 0, 0o620, true));
-        assert!(!has_safe_system_crontab_metadata(0, 0, 0o602, true));
-        assert!(!has_safe_system_crontab_metadata(0, 0, 0o600, false));
+        assert!(has_safe_system_crontab_metadata(0, 0, 0o600, 1, true));
+        assert!(!has_safe_system_crontab_metadata(1_000, 0, 0o600, 1, true));
+        assert!(!has_safe_system_crontab_metadata(0, 1_000, 0o600, 1, true));
+        assert!(!has_safe_system_crontab_metadata(0, 0, 0o620, 1, true));
+        assert!(!has_safe_system_crontab_metadata(0, 0, 0o602, 1, true));
+        assert!(!has_safe_system_crontab_metadata(0, 0, 0o600, 2, true));
+        assert!(!has_safe_system_crontab_metadata(0, 0, 0o600, 1, false));
     }
 
     #[test]
