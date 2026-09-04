@@ -373,6 +373,10 @@ fn is_valid_default_cron_d_name(name: &str) -> bool {
 }
 
 fn is_valid_lsb_cron_d_name(name: &str) -> bool {
+    if name.starts_with('.') {
+        return false;
+    }
+
     if is_lsb_hierarchical_cron_d_name(name) {
         return !is_lsb_package_manager_name(name);
     }
@@ -749,7 +753,7 @@ mod tests {
             &first,
             &lsb_hierarchical,
             &unsafe_file,
-            &directory.join(".hidden"),
+            &directory.join(".foo-bar"),
             &directory.join("ignored.cron"),
             &directory.join("backup~"),
         ] {
@@ -811,6 +815,7 @@ mod tests {
         }
         for invalid in [
             "",
+            ".foo-bar",
             "ABC_123-test",
             "foo_bar",
             "foo.bar",
