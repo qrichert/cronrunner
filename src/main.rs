@@ -7,12 +7,12 @@ use std::path::{Path, PathBuf};
 
 use lessify::Pager;
 
-use cronrunner::crontab::{self, Crontab, RunResult, RunResultDetail};
+use cronrunner::crontab::{Crontab, RunResult, RunResultDetail};
 use cronrunner::reader::{ReadError, ReadErrorDetail};
 use cronrunner::tokens::{CronJob, JobDescription, JobSection};
 
 use crate::cli::exit_status::ExitStatus;
-use crate::cli::sources::{CrontabSources, CrontabSourcesError};
+use crate::cli::sources::{CrontabSources, CrontabSourcesError, Source};
 use crate::cli::{args, job::Job, ui};
 
 #[cfg(not(tarpaulin_include))]
@@ -45,16 +45,15 @@ fn main() -> ExitStatus {
         }
     };
 
-    let mut sources = if !config.crontab_files.is_empty() {
-        match CrontabSources::try_from(config.crontab_files.as_slice()) {
-            Ok(sources) => sources,
-            Err(error) => return exit_from_crontab_sources_error(&error),
-        }
+    // No source = default (i.e., current user's crontab, `crontab -l`).
+    let sources = if config.crontab_sources.is_empty() {
+        vec![Source::from_user_crontab()]
     } else {
-        match crontab::make_instance() {
-            Ok(crontab) => CrontabSources::from(crontab),
-            Err(error) => return exit_from_crontab_read_error(&error),
-        }
+        config.crontab_sources
+    };
+    let mut sources = match CrontabSources::try_from(sources.as_slice()) {
+        Ok(sources) => sources,
+        Err(error) => return exit_from_crontab_sources_error(&error),
     };
 
     if !sources.has_runnable_jobs() {
@@ -113,11 +112,14 @@ fn exit_from_arguments_error(arg: &str) -> ExitStatus {
 
 fn exit_from_crontab_sources_error(error: &CrontabSourcesError) -> ExitStatus {
     match error {
+        CrontabSourcesError::LiveRead(error) => exit_from_crontab_read_error(error),
         CrontabSourcesError::FileRead { .. } => {
             eprintln!("{label}: {error}.", label = ui::Color::error("error"));
             ExitStatus::Failure
         }
-        CrontabSourcesError::DuplicateFile { .. } => exit_from_arguments_error(&error.to_string()),
+        CrontabSourcesError::DuplicateFile { .. } | CrontabSourcesError::DuplicateSource { .. } => {
+            exit_from_arguments_error(&error.to_string())
+        }
     }
 }
 
@@ -1166,6 +1168,22 @@ mod tests {
         let exit_code = exit_from_run_result(result);
 
         assert_eq!(exit_code, ExitStatus::Success);
+    }
+
+    #[test]
+    fn exit_from_crontab_sources_live_read_error_forwards_the_exit_status() {
+        let error = CrontabSourcesError::LiveRead(ReadError {
+            reason: "Could not read the live crontab.",
+            detail: ReadErrorDetail::NonZeroExit {
+                exit_code: Some(42),
+                stderr: None,
+            },
+        });
+
+        assert_eq!(
+            exit_from_crontab_sources_error(&error),
+            ExitStatus::Code(42)
+        );
     }
 
     #[test]
