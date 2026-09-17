@@ -45,11 +45,14 @@ Options:
   -t, --tag <TAG>           Run specific tag.
   -d, --detach              Run job in the background.
   -e, --env <FILE>          Override job environment.
+
+Crontab sources:
       --user                Add current user's crontab.
       --system[-lsb]        Add system crontabs.
   -f, --file <FILE>         Add jobs from a file (repeatable).
   -F, --system-file <FILE>  Add jobs from a system file (repeatable).
 
+Other:
   -h, --help                Show this message and exit.
   -V, --version             Show the version and exit.
 ```

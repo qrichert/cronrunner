@@ -191,11 +191,14 @@ Options:
   -t, --tag <TAG>           Run specific tag.
   -d, --detach              Run job in the background.
   -e, --env <FILE>          Override job environment.
+
+Crontab sources:
       --user                Add current user's crontab.
       --system[-lsb]        Add system crontabs.
   -f, --file <FILE>         Add jobs from a file (repeatable).
   -F, --system-file <FILE>  Add jobs from a system file (repeatable).
 
+Other:
   -h, --help                Show this message and exit.
   -V, --version             Show the version and exit.
 ",
@@ -474,12 +477,14 @@ mod tests {
         assert!(message.contains(env!("CARGO_BIN_NAME")));
         assert!(message.contains("-h, --help"));
         assert!(message.contains("-V, --version"));
+        assert!(message.contains("Other:"));
         assert!(message.contains("-l, --list-only"));
         assert!(message.contains("--as-json"));
         assert!(message.contains("--fingerprint"));
         assert!(message.contains("-t, --tag"));
         assert!(message.contains("-d, --detach"));
         assert!(message.contains("-e, --env <FILE>"));
+        assert!(message.contains("Crontab sources:"));
         assert!(message.contains("--user"));
         assert!(message.contains("--system[-lsb]"));
         assert!(message.contains("-f, --file <FILE>"));
