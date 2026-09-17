@@ -118,6 +118,13 @@ impl Config {
                 continue;
             }
 
+            if arg == "--system-lsb" {
+                config
+                    .crontab_sources
+                    .push(Source::from_lsb_system_crontab());
+                continue;
+            }
+
             if config.tag {
                 config.job = Some(Job::Tag(arg));
                 break;
@@ -185,7 +192,7 @@ Options:
   -d, --detach              Run job in the background.
   -e, --env <FILE>          Override job environment.
       --user                Add current user's crontab.
-      --system              Add system crontabs.
+      --system[-lsb]        Add system crontabs.
   -f, --file <FILE>         Add jobs from a file (repeatable).
   -F, --system-file <FILE>  Add jobs from a system file (repeatable).
 
@@ -309,6 +316,10 @@ Crontab sources:
 
   Use `--system` to read the system crontabs instead, or `--system-file`
   to read jobs from a system crontab file.
+
+  `--system-lsb` is `--system` with Cron's LSB file discovery rules for
+  `/etc/cron.d` instead of the default ones. That naming convention is
+  what cronie (Fedora/RHEL) uses under `cron -l`.
 
 System crontabs:
   System crontabs typically live in `/etc/crontab` and `/etc/cron.d/*`,
@@ -470,7 +481,7 @@ mod tests {
         assert!(message.contains("-d, --detach"));
         assert!(message.contains("-e, --env <FILE>"));
         assert!(message.contains("--user"));
-        assert!(message.contains("--system"));
+        assert!(message.contains("--system[-lsb]"));
         assert!(message.contains("-f, --file <FILE>"));
         assert!(message.contains("-F, --system-file <FILE>"));
     }
@@ -522,6 +533,10 @@ mod tests {
         );
         assert!(message.contains("Use `--user` to include the current user's crontab explicitly"));
         assert!(message.contains("Use `--system` to read the system crontabs instead"));
+        assert!(
+            message.contains("`--system-lsb` is `--system` with Cron's LSB file discovery rules")
+        );
+        assert!(message.contains("cronie (Fedora/RHEL) uses under `cron -l`"));
     }
 
     #[test]
@@ -1004,6 +1019,19 @@ mod tests {
         let err = Config::build_from_args(args).unwrap_err();
 
         assert_eq!(err, "Expected file path after '-F'");
+    }
+
+    #[test]
+    fn argument_lsb_system_crontab() {
+        let args = [
+            String::from("/usr/local/bin/crn"),
+            String::from("--system-lsb"),
+        ]
+        .into_iter();
+
+        let config = Config::build_from_args(args).unwrap();
+
+        assert_eq!(config.crontab_sources, [Source::from_lsb_system_crontab()]);
     }
 
     #[test]

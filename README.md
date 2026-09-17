@@ -46,7 +46,7 @@ Options:
   -d, --detach              Run job in the background.
   -e, --env <FILE>          Override job environment.
       --user                Add current user's crontab.
-      --system              Add system crontabs.
+      --system[-lsb]        Add system crontabs.
   -f, --file <FILE>         Add jobs from a file (repeatable).
   -F, --system-file <FILE>  Add jobs from a system file (repeatable).
 
@@ -185,6 +185,10 @@ combining it with other sources.
 
 Use `--system` to read the system crontabs instead, or `--system-file`
 to read jobs from a system crontab file.
+
+`--system-lsb` is `--system` with Cron's LSB file discovery rules for
+`/etc/cron.d` instead of the default ones. That naming convention is
+what cronie (Fedora/RHEL) uses under `cron -l`.
 
 ### System crontabs
 
